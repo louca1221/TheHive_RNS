@@ -29,21 +29,18 @@ def check_rns():
     
     for ticker in TICKERS:
         print(f"Checking RSS for {ticker}...")
-        # RSS feeds are much more stable than web pages
         url = f"https://www.investegate.co.uk/rss/company/{ticker}"
         
         try:
             response = requests.get(url, headers=headers, timeout=15)
-            # We use 'xml' parser for RSS feeds
-            soup = BeautifulSoup(response.content, '1xml-xml')
+            # Using lxml-xml to parse the RSS feed correctly
+            soup = BeautifulSoup(response.content, 'lxml-xml')
             items = soup.find_all('item')
             
             if items:
-                # The first 'item' in an RSS feed is always the latest
                 latest = items[0]
                 title = latest.title.text.strip()
                 link = latest.link.text.strip()
-                # Use the GUID or link as the unique ID
                 rns_id = latest.guid.text.strip() if latest.guid else link
 
                 if rns_id not in last_seen:
@@ -54,15 +51,14 @@ def check_rns():
                     )
                     send_telegram_msg(message)
                     save_new_id(rns_id)
-                    print(f"NEW ALERT: {ticker}")
+                    print(f"✅ ALERT SENT: {ticker} - {title}")
                 else:
-                    print(f"Already seen {ticker}.")
+                    print(f"ℹ️ Already seen {ticker}.")
             else:
-                print(f"No RSS items found for {ticker}.")
+                print(f"⚠️ No RSS items found for {ticker}.")
                 
         except Exception as e:
-            print(f"Error checking {ticker}: {e}")
+            print(f"❌ Error checking {ticker}: {e}")
 
 if __name__ == "__main__":
     check_rns()
-    

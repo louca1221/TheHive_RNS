@@ -4,38 +4,50 @@ import os
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-TICKERS = ["VOD", "BP"] # Start with 1 or 2 for testing
+TICKERS = ["VOD", "BP", "AZN"] # Update with your list
+FILE_NAME = "last_rns_ids.txt"
+
+def get_last_seen_ids():
+    if os.path.exists(FILE_NAME):
+        with open(FILE_NAME, "r") as f:
+            return set(f.read().splitlines())
+    return set()
+
+def save_new_id(rns_id):
+    with open(FILE_NAME, "a") as f:
+        f.write(rns_id + "\n")
 
 def send_telegram_msg(text):
-    if not TOKEN or not CHAT_ID:
-        print("Error: Telegram credentials missing!")
-        return
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     params = {"chat_id": CHAT_ID, "text": text, "parse_mode": "HTML"}
-    r = requests.post(url, params=params)
-    print(f"Telegram response: {r.status_code}")
+    requests.post(url, params=params)
 
 def check_rns():
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    }
+    headers = {'User-Agent': 'Mozilla/5.0'}
+    last_seen = get_last_seen_ids()
     
     for ticker in TICKERS:
-        print(f"Checking {ticker}...")
-        # LSE specific search URL
         url = f"https://www.londonstockexchange.com/stock/{ticker}/company-page"
-        
         try:
-            response = requests.get(url, headers=headers, timeout=10)
-            if response.status_code == 200:
-                print(f"Successfully reached {ticker} page.")
-                # Add your BeautifulSoup parsing logic here
-                # For testing, let's just send a confirmation:
-                send_telegram_msg(f"Checked RNS for {ticker}. Status: Connected.")
-            else:
-                print(f"Failed to reach {ticker}. Status: {response.status_code}")
+            response = requests.get(url, headers=headers, timeout=15)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # Find the News Section (LSE usually uses 'news-item' or specific ID)
+            # This selects the first news headline link
+            news_link = soup.select_one('news-item a') 
+            
+            if news_link:
+                title = news_link.text.strip()
+                link = "https://www.londonstockexchange.com" + news_link['href']
+                rns_id = news_link['href'].split('/')[-1] # Unique ID from URL
+
+                if rns_id not in last_seen:
+                    message = f"<b>New RNS: {ticker}</b>\n{title}\n<a href='{link}'>Read Full Release</a>"
+                    send_telegram_msg(message)
+                    save_new_id(rns_id)
+                    print(f"Alert sent for {ticker}")
         except Exception as e:
-            print(f"Error checking {ticker}: {e}")
+            print(f"Error scraping {ticker}: {e}")
 
 if __name__ == "__main__":
     check_rns()

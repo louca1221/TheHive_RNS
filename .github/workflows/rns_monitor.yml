@@ -1,0 +1,43 @@
+name: RNS Alert Bot
+
+on:
+  schedule:
+    - cron: '*/15 * * * *' # Runs every 15 minutes
+  workflow_dispatch:      # Allows you to run it manually via a button
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Download your code from the repository into the runner
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2. Install Python
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      # 3. Install the scraping libraries
+      - name: Install dependencies
+        run: |
+          pip install requests beautifulsoup4
+
+      # 4. DEBUG STEP: This shows us exactly what files GitHub sees
+      - name: List files in directory
+        run: |
+          echo "Current directory:"
+          pwd
+          echo "Files in root:"
+          ls -F
+
+      # 5. Run the actual bot script
+      - name: Run Bot
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        # Ensure 'bot.py' is exactly what your file is named (all lowercase)
+        run: python bot.py
+        

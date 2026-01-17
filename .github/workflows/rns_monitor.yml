@@ -24,7 +24,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install requests beautifulsoup4 1xml
+          pip install requests beautifulsoup4 lxml
 
       - name: Run Bot
         env:

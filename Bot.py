@@ -6,7 +6,7 @@ import os
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 # Add your specific tickers here
-TICKERS = ["VOD", "BP", "AZN"] 
+TICKERS = ["UFO", "KOD", "ALK"] 
 
 def check_rns():
     for ticker in TICKERS:

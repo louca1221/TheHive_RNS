@@ -3,41 +3,51 @@ name: RNS Alert Bot
 on:
   schedule:
     - cron: '*/15 * * * *' # Runs every 15 minutes
-  workflow_dispatch:      # Allows you to run it manually via a button
+  workflow_dispatch:      # Allows manual trigger button
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Required to allow the bot to commit the "last_seen" file back to the repo
+    permissions:
+      contents: write
 
     steps:
-      # 1. Download your code from the repository into the runner
+      # 1. Pull the latest code and history from your repo
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      # 2. Install Python
+      # 2. Setup Python environment
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
 
-      # 3. Install the scraping libraries
+      # 3. Install necessary scraping tools
       - name: Install dependencies
         run: |
           pip install requests beautifulsoup4
 
-      # 4. DEBUG STEP: This shows us exactly what files GitHub sees
-      - name: List files in directory
-        run: |
-          echo "Current directory:"
-          pwd
-          echo "Files in root:"
-          ls -F
-
-      # 5. Run the actual bot script
+      # 4. Run the RNS Bot
       - name: Run Bot
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        # Ensure 'bot.py' is exactly what your file is named (all lowercase)
         run: python bot.py
-        
+
+      # 5. Save the 'last_seen_ids.txt' back to GitHub
+      # This ensures the bot doesn't spam you with the same RNS next time
+      - name: Commit and push if there are new alerts
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          # Check if the file exists before trying to add it
+          if [ -f last_rns_ids.txt ]; then
+            git add last_rns_ids.txt
+            git commit -m "Update last seen RNS IDs [skip ci]" || echo "No changes to commit"
+            git push
+          else
+            echo "No history file found to commit."
+          fi

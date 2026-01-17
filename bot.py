@@ -4,7 +4,7 @@ import os
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 # Tickers you want to watch
-TICKERS = ["VOD", "BP", "SGE", "AZN", "GSK"] 
+TICKERS = ["VOD", "BP", "SGE", "AZN", "GSK", "LLOY", "SHEL"]
 FILE_NAME = "last_rns_ids.txt"
 
 def get_last_seen_ids():

@@ -4,8 +4,7 @@ import os
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-# Add your tickers here (use the TIDM/Ticker code)
-TICKERS = ["VOD", "BP", "GSK", "AZN", "SGE"] 
+TICKERS = ["VOD", "BP", "SGE", "AZN"] 
 FILE_NAME = "last_rns_ids.txt"
 
 def get_last_seen_ids():
@@ -28,36 +27,43 @@ def check_rns():
     last_seen = get_last_seen_ids()
     
     for ticker in TICKERS:
-        print(f"Searching Investegate for: {ticker}...")
-        # Investegate search results for specific tickers
-        url = f"https://www.investegate.co.uk/search-results?q={ticker}"
+        print(f"Checking {ticker} at investegate.co.uk/company/{ticker}...")
+        url = f"https://www.investegate.co.uk/company/{ticker}"
         
         try:
             response = requests.get(url, headers=headers, timeout=15)
+            if response.status_code != 200:
+                print(f"Failed to reach page for {ticker}. Status: {response.status_code}")
+                continue
+
             soup = BeautifulSoup(response.text, 'html.parser')
             
-            # Target the first 'search-result-title' which holds the latest RNS
-            result = soup.select_one('.search-result-title a')
+            # Investegate tables usually have links within 'td' or 'a' tags for announcements
+            # We target the first link that looks like an announcement
+            links = soup.select('table a[href*="/announcement/"]')
             
-            if result:
-                title = result.get_text(strip=True)
-                link = "https://www.investegate.co.uk" + result['href']
-                # The ID is the unique number at the end of the URL
-                rns_id = result['href'].split('/')[-1]
+            if links:
+                latest = links[0]
+                title = latest.get_text(strip=True)
+                relative_url = latest.get('href')
+                full_url = f"https://www.investegate.co.uk{relative_url}"
+                
+                # The ID is usually the last part of the URL (numeric)
+                rns_id = relative_url.rstrip('/').split('/')[-1]
 
                 if rns_id not in last_seen:
                     message = (
-                        f"🔔 <b>New RNS Alert: {ticker}</b>\n\n"
-                        f"{title}\n\n"
-                        f"🔗 <a href='{link}'>Read Full Release</a>"
+                        f"🔔 <b>New RNS: {ticker}</b>\n\n"
+                        f"<b>Headline:</b> {title}\n\n"
+                        f"🔗 <a href='{full_url}'>Read Full Release</a>"
                     )
                     send_telegram_msg(message)
                     save_new_id(rns_id)
-                    print(f"Successfully sent alert for {ticker}")
+                    print(f"Alert sent for {ticker}")
                 else:
-                    print(f"No new RNS for {ticker} (already seen ID: {rns_id})")
+                    print(f"No new updates for {ticker}.")
             else:
-                print(f"Could not find any news results for {ticker}")
+                print(f"No announcement links found for {ticker}.")
                 
         except Exception as e:
             print(f"Error checking {ticker}: {e}")

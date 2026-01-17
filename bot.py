@@ -4,7 +4,9 @@ import os
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-TICKERS = ["VOD", "BP", "SGE", "AZN"] 
+
+# Tickers must be exactly as they appear in RNS headlines (usually uppercase)
+TICKERS = ["VOD", "BP", "SGE", "AZN", "GSK"] 
 FILE_NAME = "last_rns_ids.txt"
 
 def get_last_seen_ids():
@@ -27,38 +29,40 @@ def check_rns():
     headers = {'User-Agent': 'Mozilla/5.0'}
     last_seen = get_last_seen_ids()
     
-    for ticker in TICKERS:
-        print(f"Checking RSS for {ticker}...")
-        url = f"https://www.investegate.co.uk/rss/company/{ticker}"
+    # This is the master feed for ALL recent announcements
+    url = "https://www.investegate.co.uk/rss/announcements"
+    
+    print("Fetching master RNS feed...")
+    try:
+        response = requests.get(url, headers=headers, timeout=15)
+        soup = BeautifulSoup(response.content, 'lxml-xml')
+        items = soup.find_all('item')
         
-        try:
-            response = requests.get(url, headers=headers, timeout=15)
-            # Using lxml-xml to parse the RSS feed correctly
-            soup = BeautifulSoup(response.content, 'lxml-xml')
-            items = soup.find_all('item')
-            
-            if items:
-                latest = items[0]
-                title = latest.title.text.strip()
-                link = latest.link.text.strip()
-                rns_id = latest.guid.text.strip() if latest.guid else link
+        found_count = 0
+        for item in items:
+            title = item.title.text.strip()
+            link = item.link.text.strip()
+            rns_id = item.guid.text.strip() if item.guid else link
 
+            # Check if any of our tickers are mentioned in the title (e.g., "AstraZeneca PLC - AZN")
+            # We use a space around the ticker to avoid partial matches (e.g., 'BP' matching 'BP.L')
+            if any(ticker in title for ticker in TICKERS):
                 if rns_id not in last_seen:
                     message = (
-                        f"🔔 <b>New RNS: {ticker}</b>\n\n"
+                        f"🔔 <b>New RNS Match</b>\n\n"
                         f"{title}\n\n"
                         f"🔗 <a href='{link}'>Read Full Release</a>"
                     )
                     send_telegram_msg(message)
                     save_new_id(rns_id)
-                    print(f"✅ ALERT SENT: {ticker} - {title}")
-                else:
-                    print(f"ℹ️ Already seen {ticker}.")
-            else:
-                print(f"⚠️ No RSS items found for {ticker}.")
+                    print(f"✅ MATCH FOUND: {title}")
+                    found_count += 1
+        
+        if found_count == 0:
+            print("No new RNS found for your specific tickers in the latest feed.")
                 
-        except Exception as e:
-            print(f"❌ Error checking {ticker}: {e}")
+    except Exception as e:
+        print(f"❌ Error fetching feed: {e}")
 
 if __name__ == "__main__":
     check_rns()

@@ -35,7 +35,7 @@ def check_rns():
         try:
             response = requests.get(url, headers=headers, timeout=15)
             # We use 'xml' parser for RSS feeds
-            soup = BeautifulSoup(response.content, 'xml')
+            soup = BeautifulSoup(response.content, '1xml-xml')
             items = soup.find_all('item')
             
             if items:

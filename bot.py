@@ -20,53 +20,49 @@ def save_new_id(rns_id):
 def send_telegram_msg(text):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     params = {"chat_id": CHAT_ID, "text": text, "parse_mode": "HTML"}
-    requests.post(url, params=params)
+    r = requests.post(url, params=params)
+    print(f"Telegram status: {r.status_code}")
 
 def check_rns():
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+    headers = {'User-Agent': 'Mozilla/5.0'}
     last_seen = get_last_seen_ids()
     
     for ticker in TICKERS:
-        print(f"Checking {ticker} at investegate.co.uk/company/{ticker}...")
-        url = f"https://www.investegate.co.uk/company/{ticker}"
+        print(f"Checking RSS for {ticker}...")
+        # RSS feeds are much more stable than web pages
+        url = f"https://www.investegate.co.uk/rss/company/{ticker}"
         
         try:
             response = requests.get(url, headers=headers, timeout=15)
-            if response.status_code != 200:
-                print(f"Failed to reach page for {ticker}. Status: {response.status_code}")
-                continue
-
-            soup = BeautifulSoup(response.text, 'html.parser')
+            # We use 'xml' parser for RSS feeds
+            soup = BeautifulSoup(response.content, 'xml')
+            items = soup.find_all('item')
             
-            # Investegate tables usually have links within 'td' or 'a' tags for announcements
-            # We target the first link that looks like an announcement
-            links = soup.select('table a[href*="/announcement/"]')
-            
-            if links:
-                latest = links[0]
-                title = latest.get_text(strip=True)
-                relative_url = latest.get('href')
-                full_url = f"https://www.investegate.co.uk{relative_url}"
-                
-                # The ID is usually the last part of the URL (numeric)
-                rns_id = relative_url.rstrip('/').split('/')[-1]
+            if items:
+                # The first 'item' in an RSS feed is always the latest
+                latest = items[0]
+                title = latest.title.text.strip()
+                link = latest.link.text.strip()
+                # Use the GUID or link as the unique ID
+                rns_id = latest.guid.text.strip() if latest.guid else link
 
                 if rns_id not in last_seen:
                     message = (
                         f"🔔 <b>New RNS: {ticker}</b>\n\n"
-                        f"<b>Headline:</b> {title}\n\n"
-                        f"🔗 <a href='{full_url}'>Read Full Release</a>"
+                        f"{title}\n\n"
+                        f"🔗 <a href='{link}'>Read Full Release</a>"
                     )
                     send_telegram_msg(message)
                     save_new_id(rns_id)
-                    print(f"Alert sent for {ticker}")
+                    print(f"NEW ALERT: {ticker}")
                 else:
-                    print(f"No new updates for {ticker}.")
+                    print(f"Already seen {ticker}.")
             else:
-                print(f"No announcement links found for {ticker}.")
+                print(f"No RSS items found for {ticker}.")
                 
         except Exception as e:
             print(f"Error checking {ticker}: {e}")
 
 if __name__ == "__main__":
     check_rns()
+    

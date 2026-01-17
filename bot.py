@@ -1,11 +1,9 @@
 import requests
-from bs4 import BeautifulSoup
 import os
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-
-# Tickers must be exactly as they appear in RNS headlines (usually uppercase)
+# Tickers you want to watch
 TICKERS = ["VOD", "BP", "SGE", "AZN", "GSK"] 
 FILE_NAME = "last_rns_ids.txt"
 
@@ -23,46 +21,62 @@ def send_telegram_msg(text):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     params = {"chat_id": CHAT_ID, "text": text, "parse_mode": "HTML"}
     r = requests.post(url, params=params)
-    print(f"Telegram status: {r.status_code}")
+    print(f"Telegram Response: {r.status_code}")
 
 def check_rns():
-    headers = {'User-Agent': 'Mozilla/5.0'}
+    # Modern headers to look like a real browser
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'application/json'
+    }
+    
+    # LSE News Explorer JSON Endpoint
+    url = "https://api.londonstockexchange.com/api/v1/pages?path=news&parameters=categories%3Drns"
+    
+    print("Requesting JSON feed from LSE...")
     last_seen = get_last_seen_ids()
-    
-    # This is the master feed for ALL recent announcements
-    url = "https://www.investegate.co.uk/rss/announcements"
-    
-    print("Fetching master RNS feed...")
+
     try:
         response = requests.get(url, headers=headers, timeout=15)
-        soup = BeautifulSoup(response.content, 'lxml-xml')
-        items = soup.find_all('item')
+        data = response.json()
         
-        found_count = 0
-        for item in items:
-            title = item.title.text.strip()
-            link = item.link.text.strip()
-            rns_id = item.guid.text.strip() if item.guid else link
+        # In the LSE JSON structure, the news items are usually inside components
+        # We find the 'news-list' or similar key
+        components = data.get('components', [])
+        news_items = []
+        
+        for comp in components:
+            if comp.get('type') == 'news-list' or 'content' in comp:
+                news_items = comp.get('content', [])
+                break
 
-            # Check if any of our tickers are mentioned in the title (e.g., "AstraZeneca PLC - AZN")
-            # We use a space around the ticker to avoid partial matches (e.g., 'BP' matching 'BP.L')
-            if any(ticker in title for ticker in TICKERS):
+        found_new = 0
+        for item in news_items:
+            # Extract fields from JSON
+            title = item.get('title', '')
+            ticker_found = item.get('tidm', '')
+            rns_id = item.get('newsId', '')
+            # Build the link using the newsId or path
+            link = f"https://www.londonstockexchange.com/news-article/RNS/{item.get('path', '')}"
+
+            # Match logic
+            if ticker_found in TICKERS:
                 if rns_id not in last_seen:
                     message = (
-                        f"🔔 <b>New RNS Match</b>\n\n"
+                        f"🔔 <b>New RNS Alert: {ticker_found}</b>\n\n"
                         f"{title}\n\n"
                         f"🔗 <a href='{link}'>Read Full Release</a>"
                     )
                     send_telegram_msg(message)
                     save_new_id(rns_id)
-                    print(f"✅ MATCH FOUND: {title}")
-                    found_count += 1
+                    print(f"✅ Match: {ticker_found}")
+                    found_new += 1
         
-        if found_count == 0:
-            print("No new RNS found for your specific tickers in the latest feed.")
-                
+        if found_new == 0:
+            print("No new announcements for watched tickers.")
+
     except Exception as e:
-        print(f"❌ Error fetching feed: {e}")
+        print(f"❌ Error: {e}")
 
 if __name__ == "__main__":
     check_rns()

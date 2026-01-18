@@ -27,22 +27,41 @@ def send_telegram_msg(text):
 # --- GITHUB API SYNC ---
 def add_ticker_to_github(ticker):
     file_url = f"https://api.github.com/repos/{REPO_NAME}/contents/{TICKER_FILE}"
-    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+    headers = {
+        "Authorization": f"token {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github.v3+json"
+    }
     
-    res = requests.get(file_url, headers=headers).json()
-    sha = res.get('sha')
-    current_content = base64.b64decode(res['content']).decode('utf-8') if sha else ""
-    
-    if ticker not in current_content.split():
-        new_content = current_content.strip() + f"\n{ticker}"
-        payload = {
-            "message": f"Add {ticker} via Telegram",
-            "content": base64.b64encode(new_content.encode('utf-8')).decode('utf-8'),
-            "sha": sha
-        }
-        requests.put(file_url, headers=headers, json=payload)
-        send_telegram_msg(f"✅ Added <b>{ticker}</b> to watchlist.")
+    # 1. Get the file
+    res = requests.get(file_url, headers=headers)
+    if res.status_code != 200:
+        send_telegram_msg(f"❌ Error: Could not find tickers.txt on GitHub (Code {res.status_code})")
+        return
 
+    data = res.json()
+    sha = data.get('sha')
+    current_content = base64.b64decode(data['content']).decode('utf-8')
+    
+    if ticker in current_content.split():
+        send_telegram_msg(f"ℹ️ {ticker} is already in your watchlist.")
+        return
+
+    # 2. Update the file
+    new_content = current_content.strip() + f"\n{ticker}"
+    payload = {
+        "message": f"Add {ticker} via Telegram",
+        "content": base64.b64encode(new_content.encode('utf-8')).decode('utf-8'),
+        "sha": sha
+    }
+    
+    put_res = requests.put(file_url, headers=headers, json=payload)
+    
+    if put_res.status_code == 200 or put_res.status_code == 201:
+        send_telegram_msg(f"✅ Successfully added <b>{ticker}</b> to GitHub!")
+    else:
+        # This will tell you exactly why it failed (e.g., 401 = Bad Token, 403 = No Permission)
+        send_telegram_msg(f"❌ GitHub API Error: {put_res.status_code}\n{put_res.json().get('message')}")
+        
 def sync_commands():
     url = f"https://api.telegram.org/bot{TOKEN}/getUpdates"
     try:

@@ -1,5 +1,39 @@
 import requests
 import os
+import base64
+
+GITHUB_TOKEN = os.getenv("GH_PAT")
+REPO_NAME = "louca1221/TheHive_RNS"
+
+def sync_tickers_from_telegram():
+    url = f"https://api.telegram.org/bot{TOKEN}/getUpdates"
+    updates = requests.get(url).json()
+    
+    for update in updates.get("result", []):
+        text = update.get("message", {}).get("text", "")
+        if text.startswith("/add "):
+            new_ticker = text.replace("/add ", "").strip().upper()
+            add_ticker_to_github(new_ticker)
+
+def add_ticker_to_github(ticker):
+    file_url = f"https://api.github.com/repos/{REPO_NAME}/contents/tickers.txt"
+    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+    
+    # 1. Get the current file content and its 'sha' (ID)
+    res = requests.get(file_url, headers=headers).json()
+    sha = res['sha']
+    current_content = base64.b64decode(res['content']).decode('utf-8')
+    
+    if ticker not in current_content:
+        new_content = current_content + f"\n{ticker}"
+        payload = {
+            "message": f"Add {ticker} via Telegram",
+            "content": base64.b64encode(new_content.encode('utf-8')).decode('utf-8'),
+            "sha": sha
+        }
+        # 2. Push the update back to GitHub
+        requests.put(file_url, headers=headers, json=payload)
+        send_telegram_msg(f"✅ Added {ticker} to watchlist.")
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")

@@ -24,18 +24,29 @@ def send_telegram_msg(text):
         params = {"chat_id": chat_id.strip(), "text": text, "parse_mode": "HTML"}
         requests.post(url, params=params)
 
+# TEMPORARY DEBUG LINE
+print(f"DEBUG: Token length is {len(GITHUB_TOKEN) if GITHUB_TOKEN else 0} characters.")
+
 # --- GITHUB API SYNC ---
 def add_ticker_to_github(ticker):
+    # FIRST: Check if the token actually exists in the script's memory
+    if not GITHUB_TOKEN:
+        send_telegram_msg("❌ Error: GH_PAT is missing from the script environment. Check your YAML file!")
+        return
+
     file_url = f"https://api.github.com/repos/{REPO_NAME}/contents/{TICKER_FILE}"
+    
+    # Modern GitHub API headers
     headers = {
-        "Authorization": f"token {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github.v3+json"
+        "Authorization": f"Bearer {GITHUB_TOKEN}", # Changed 'token' to 'Bearer'
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28"
     }
     
     # 1. Get the file
     res = requests.get(file_url, headers=headers)
     if res.status_code != 200:
-        send_telegram_msg(f"❌ Error: Could not find tickers.txt on GitHub (Code {res.status_code})")
+        send_telegram_msg(f"❌ Error {res.status_code}: Couldn't reach GitHub. Check REPO_NAME in bot.py.")
         return
 
     data = res.json()

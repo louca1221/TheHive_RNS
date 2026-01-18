@@ -52,6 +52,26 @@ def send_telegram_msg(text):
             print(f"Failed to send to {chat_id}: {e}")
 
 def check_rns():
+    # Load your tickers
+    TICKERS = load_tickers()
+    
+    # --- STARTUP NOTIFICATION ---
+    if TICKERS:
+        # Create a bulleted list for Telegram
+        ticker_list_text = "\n".join([f"• {t}" for t in TICKERS])
+        startup_msg = (
+            f"🚀 <b>RNS Bot Started</b>\n"
+            f"Monitoring {len(TICKERS)} tickers:\n\n"
+            f"{ticker_list_text}"
+        )
+        send_telegram_msg(startup_msg)
+    else:
+        send_telegram_msg("⚠️ <b>Warning:</b> No tickers found in tickers.txt!")
+        return # Stop if there's nothing to track
+    # ----------------------------
+
+    # ... rest of your JSON request and matching logic ...
+    
     # Modern headers to look like a real browser
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',

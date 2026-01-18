@@ -75,34 +75,33 @@ def add_ticker_to_github(ticker):
         
 def sync_commands():
     url = f"https://api.telegram.org/bot{TOKEN}/getUpdates"
-    # We only want to process a small batch at a time to keep it fast
-    params = {"limit": 10, "timeout": 1}
+    # We explicitly ask for channel_post updates
+    params = {"limit": 10, "timeout": 1, "allowed_updates": ["message", "channel_post"]}
     
     try:
         response = requests.get(url, params=params).json()
         updates = response.get("result", [])
         
-        if not updates:
-            print("No new commands in Telegram.")
-            return
-
         last_id = 0
         for update in updates:
             last_id = update.get("update_id")
-            message = update.get("message", {})
-            text = message.get("text", "")
             
-            if text.startswith("/add "):
-                ticker = text.replace("/add ", "").strip().upper()
-                print(f"Adding ticker: {ticker}")
-                add_ticker_to_github(ticker)
-        
-        # This is the "Clear Inbox" step
-        if last_id > 0:
-            # offset = last_id + 1 marks all previous messages as 'read'
-            requests.get(url, params={"offset": last_id + 1})
-            print(f"Successfully cleared Telegram queue up to ID: {last_id}")
+            # Check both the 'message' bucket AND the 'channel_post' bucket
+            msg_data = update.get("message") or update.get("channel_post")
+            
+            if msg_data:
+                text = msg_data.get("text", "")
+                if text.startswith("/add "):
+                    ticker = text.replace("/add ", "").strip().upper()
+                    add_ticker_to_github(ticker)
+                elif text == "/list":
+                    tickers = load_tickers()
+                    msg = "📋 <b>Watchlist:</b>\n" + "\n".join([f"• {t}" for t in tickers])
+                    send_telegram_msg(msg)
 
+        if last_id > 0:
+            requests.get(url, params={"offset": last_id + 1})
+            
     except Exception as e:
         print(f"Sync Error: {e}")
 

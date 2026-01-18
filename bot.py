@@ -18,10 +18,23 @@ def save_new_id(rns_id):
         f.write(rns_id + "\n")
 
 def send_telegram_msg(text):
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    params = {"chat_id": CHAT_ID, "text": text, "parse_mode": "HTML"}
-    r = requests.post(url, params=params)
-    print(f"Telegram Response: {r.status_code}")
+    # Get the string from environment and split it into a list
+    chat_ids_str = os.getenv("TELEGRAM_CHAT_ID", "")
+    chat_ids = chat_ids_str.split(",") if chat_ids_str else []
+
+    if not chat_ids:
+        print("Error: No Chat IDs found!")
+        return
+
+    for chat_id in chat_ids:
+        chat_id = chat_id.strip() # Remove any accidental spaces
+        url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+        params = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
+        try:
+            r = requests.post(url, params=params, timeout=10)
+            print(f"Sent to {chat_id}: {r.status_code}")
+        except Exception as e:
+            print(f"Failed to send to {chat_id}: {e}")
 
 def check_rns():
     # Modern headers to look like a real browser

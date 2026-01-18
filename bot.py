@@ -38,7 +38,7 @@ def add_ticker_to_github(ticker):
     
     # Modern GitHub API headers
     headers = {
-        "Authorization": f"Bearer {GITHUB_TOKEN}", # Changed 'token' to 'Bearer'
+        "Authorization": f"Bearer {GITHUB_TOKEN}",
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28"
     }
@@ -46,7 +46,7 @@ def add_ticker_to_github(ticker):
     # 1. Get the file
     res = requests.get(file_url, headers=headers)
     if res.status_code != 200:
-        send_telegram_msg(f"❌ Error {res.status_code}: Couldn't reach GitHub. Check REPO_NAME in bot.py.")
+        send_telegram_msg(f"❌ Error {res.status_code}: Couldn't reach GitHub. Check REPO_NAME.")
         return
 
     data = res.json()
@@ -68,7 +68,7 @@ def add_ticker_to_github(ticker):
     put_res = requests.put(file_url, headers=headers, json=payload)
     
     if put_res.status_code == 200 or put_res.status_code == 201:
-        send_telegram_msg(f"✅ Successfully added <b>{ticker}</b> to GitHub!")
+        send_telegram_msg(f"✅ Successfully added <b>{ticker}</b> to watchlist")
     else:
         # This will tell you exactly why it failed (e.g., 401 = Bad Token, 403 = No Permission)
         send_telegram_msg(f"❌ GitHub API Error: {put_res.status_code}\n{put_res.json().get('message')}")

@@ -3,9 +3,16 @@ import os
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-# Tickers you want to watch
-TICKERS = ["QHE",	"SYME",	"VLRM",	"MARU",	"AMGO",	"QBT",	"AMP",	"FCM",	"MET1",	"PHE",	"ECR",	"ZIOC",	"MAST",	"WCAP",	"COBR",	"SEE",	"HE1",	"AMG",	"KEFI",	"PXC",	"ALRT",	"AVCT",	"TRP",	"ECO",	"SKA",	"HAYD",	"HEX",	"CPX",	"CIZ",	"CIZ",	"BIRD",	"INSG",	"HVO",	"WSBN",	"SVNS",	"88E",	"MILA",	"CRCL",	"EOG",	"WCAP",	"EUA",	"EUA",	"JAN",	"APTA",	"BZT",	"CMET",	"CHP",	"DEC",	"TOM",	"BOR",	"NEO",	"ONDO",	"HUI",	"GEO",	"GUN",	"TERN",	"LND",	"IRON",	"PPP",	"TM1",	"VAST",	"ALGW",
-]
+def load_tickers():
+    file_path = "tickers.txt"
+    if os.path.exists(file_path):
+        with open(file_path, "r") as f:
+            # Read lines, remove whitespace, and skip empty lines
+            return [line.strip().upper() for line in f if line.strip()]
+    return []
+
+# Now your TICKERS list is dynamic
+TICKERS = load_tickers()
 FILE_NAME = "last_rns_ids.txt"
 
 def get_last_seen_ids():

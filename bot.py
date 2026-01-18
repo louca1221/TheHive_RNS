@@ -75,13 +75,34 @@ def add_ticker_to_github(ticker):
         
 def sync_commands():
     url = f"https://api.telegram.org/bot{TOKEN}/getUpdates"
+    # We only want to process a small batch at a time to keep it fast
+    params = {"limit": 10, "timeout": 1}
+    
     try:
-        updates = requests.get(url).json().get("result", [])
+        response = requests.get(url, params=params).json()
+        updates = response.get("result", [])
+        
+        if not updates:
+            print("No new commands in Telegram.")
+            return
+
+        last_id = 0
         for update in updates:
-            text = update.get("message", {}).get("text", "")
+            last_id = update.get("update_id")
+            message = update.get("message", {})
+            text = message.get("text", "")
+            
             if text.startswith("/add "):
                 ticker = text.replace("/add ", "").strip().upper()
+                print(f"Adding ticker: {ticker}")
                 add_ticker_to_github(ticker)
+        
+        # This is the "Clear Inbox" step
+        if last_id > 0:
+            # offset = last_id + 1 marks all previous messages as 'read'
+            requests.get(url, params={"offset": last_id + 1})
+            print(f"Successfully cleared Telegram queue up to ID: {last_id}")
+
     except Exception as e:
         print(f"Sync Error: {e}")
 

@@ -7,12 +7,19 @@ def load_tickers():
     file_path = "tickers.txt"
     if os.path.exists(file_path):
         with open(file_path, "r") as f:
-            # Read lines, remove whitespace, and skip empty lines
+            # .strip() removes spaces/newlines
+            # .upper() ensures "vod" becomes "VOD"
+            # 'if line.strip()' skips empty lines
             return [line.strip().upper() for line in f if line.strip()]
     return []
 
 # Now your TICKERS list is dynamic
 TICKERS = load_tickers()
+print("--- DEBUG WATCHLIST ---")
+for ticker in TICKERS:
+    print(f"Tracking: [{ticker}]")
+print(f"Total: {len(TICKERS)}")
+print("-----------------------")
 FILE_NAME = "last_rns_ids.txt"
 
 def get_last_seen_ids():

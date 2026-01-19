@@ -158,7 +158,7 @@ def check_rns():
                     rns_id = hashlib.md5(f"{ticker}{title}".encode()).hexdigest()
 
                     if rns_id not in last_seen:
-                        msg = f"📰 <b>New RNS: {ticker} {company_text}</b>\n{title}\n\n🔗 <a href='{full_link}'>Read Full Release</a>"
+                        msg = f"📰 <b>New RNS: #{ticker}{company_text}</b>\n{title}\n\n🔗 <a href='{full_link}'>Read Full Release</a>"
                         send_telegram_msg(msg)
                         with open(FILE_NAME, "a") as f:
                             f.write(rns_id + "\n")

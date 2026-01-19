@@ -29,26 +29,30 @@ def check_rns():
     tickers = load_tickers()
     if not tickers: return
 
-    url = "https://www.investegate.co.uk/announcements/rns/latest/"
-    # Use a more "human" user-agent to avoid being blocked
-    headers = {
+    # Using the RSS endpoint - it is usually less protected than the HTML page
+    url = "https://www.investegate.co.uk/rss/announcements/rns/latest/"
+    
+    session = requests.Session()
+    session.headers.update({
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept-Language': 'en-GB,en;q=0.9'
-    }
+        'Accept': 'application/rss+xml, application/xml;q=0.9, */*;q=0.8',
+        'Referer': 'https://www.google.com/'
+    })
 
     try:
-        response = requests.get(url, headers=headers, timeout=15)
+        # 1. Fetch the RSS content
+        response = session.get(url, timeout=20)
         
-        # DEBUG: If this prints 403 or 404, you are being blocked
-        print(f"Status Code: {response.status_code}")
+        # If we still get a 403, we may need to use a proxy
+        if response.status_code != 200:
+            print(f"Blocked by site. Status: {response.status_code}")
+            return
+
+        # 2. Use 'xml' parser for the RSS feed
+        soup = BeautifulSoup(response.content, 'xml')
+        items = soup.find_all('item')
         
-        soup = BeautifulSoup(response.text, 'html.parser')
-        print(f"DEBUG: Found {len(soup.find_all('a'))} links on page.")
-        
-        # 1. NEW STRATEGY: Find all links first
-        # News on Investegate is almost always inside an <a> tag
-        links = soup.find_all('a', href=True)
-        news_found = 0
+        print(f"DEBUG: Found {len(items)} items in RSS feed.")
 
         for link in links:
             text = link.get_text().upper()

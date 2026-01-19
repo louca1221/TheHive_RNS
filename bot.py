@@ -4,6 +4,7 @@ import os
 import base64
 import hashlib
 from datetime import datetime
+from urllib.parse import urljoin
 
 # --- CONFIGURATION ---
 TOKEN = os.getenv("TELEGRAM_TOKEN")
@@ -99,14 +100,17 @@ def sync_commands():
         print(f"Sync Error: {e}")
 
 # --- RNS SCRAPER ---
+from urllib.parse import urljoin  # Add this at the very top of your script
+
 def check_rns():
     tickers = load_tickers()
     if not tickers:
         print("No tickers found.")
         return
 
-    # Using the 'Today' URL as requested
-    url = "https://www.investegate.co.uk/today-announcements/"
+    # Using the 'Today' URL
+    base_url = "https://www.investegate.co.uk"
+    today_url = f"{base_url}/today-announcements/"
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     }
@@ -118,10 +122,10 @@ def check_rns():
         last_seen = set()
 
     try:
-        response = requests.get(url, headers=headers, timeout=15)
+        response = requests.get(today_url, headers=headers, timeout=15)
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # In the 'Today' table, each announcement is a row (tr)
+        # Target table rows
         rows = soup.find_all('tr')
         news_found = 0
 
@@ -129,18 +133,18 @@ def check_rns():
             row_text = row.get_text().upper()
             
             for ticker in tickers:
-                # We search for the ticker anywhere in the row text
-                # Investegate often shows tickers as 'VOD' or 'VOD.'
                 if ticker in row_text:
                     link_tag = row.find('a', href=True)
                     if not link_tag:
                         continue
                         
                     title = link_tag.get_text().strip()
-                    path = link_tag['href']
-                    full_link = f"{path}"
+                    relative_path = link_tag['href']
                     
-                    # Create unique ID based on ticker and title
+                    # --- THE FIX IS HERE ---
+                    # urljoin correctly combines 'https://www.investegate.co.uk' with '/announcement/...'
+                    full_link = urljoin(base_url, relative_path)
+                    
                     rns_id = hashlib.md5(f"{ticker}{title}".encode()).hexdigest()
 
                     if rns_id not in last_seen:
@@ -154,7 +158,7 @@ def check_rns():
                         last_seen.add(rns_id)
                         news_found += 1
         
-        print(f"Scan complete. Found {news_found} new items on Today's page.")
+        print(f"Scan complete. Found {news_found} new items.")
 
     except Exception as e:
         print(f"Scraper Error: {e}")

@@ -27,63 +27,52 @@ def send_telegram_msg(text):
 
 def check_rns():
     tickers = load_tickers()
-    if not tickers:
-        print("No tickers found.")
-        return
+    if not tickers: return
 
-    # Investegate Latest RNS Page
     url = "https://www.investegate.co.uk/announcements/rns/latest/"
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
-
-    # Load history
-    if os.path.exists(FILE_NAME):
-        with open(FILE_NAME, "r") as f:
-            last_seen = set(f.read().splitlines())
-    else:
-        last_seen = set()
+    # Use a more "human" user-agent to avoid being blocked
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept-Language': 'en-GB,en;q=0.9'
+    }
 
     try:
         response = requests.get(url, headers=headers, timeout=15)
+        
+        # DEBUG: If this prints 403 or 404, you are being blocked
+        print(f"Status Code: {response.status_code}")
+        
         soup = BeautifulSoup(response.text, 'html.parser')
+        print(f"DEBUG: Found {len(soup.find_all('a'))} links on page.")
         
-        # Investegate usually stores news in a table. We search for rows.
-        # Note: We look for the ticker string (e.g., "(VOD)") inside the row text
+        # 1. NEW STRATEGY: Find all links first
+        # News on Investegate is almost always inside an <a> tag
+        links = soup.find_all('a', href=True)
         news_found = 0
-        
-        # Find all table rows or news containers
-        rows = soup.find_all('tr') # Search standard table rows
-        
-        for row in rows:
-            row_text = row.get_text()
+
+        for link in links:
+            text = link.get_text().upper()
             
             for ticker in tickers:
-                # Pattern match for Ticker in brackets like (VOD)
-                if f"({ticker})" in row_text:
-                    link_tag = row.find('a', href=True)
-                    if not link_tag: continue
+                # Check if the ticker (VOD) or (VOD.) is in the link text
+                if f"({ticker}" in text:
+                    title = text.strip()
+                    path = link['href']
+                    full_link = f"https://www.investegate.co.uk{path}" if path.startswith('/') else path
                     
-                    title = link_tag.get_text().strip()
-                    path = link_tag['href']
-                    full_link = f"https://www.investegate.co.uk{path}"
-                    
-                    # Create a unique ID for this news item
                     rns_id = hashlib.md5(f"{ticker}{title}".encode()).hexdigest()
 
+                    # Load/Check history as before...
                     if rns_id not in last_seen:
-                        msg = (f"🔔 <b>New RNS: {ticker}</b>\n"
-                               f"{title}\n\n"
-                               f"🔗 <a href='{full_link}'>Read Full Release</a>")
+                        msg = f"🔔 <b>New RNS: {ticker}</b>\n{title}\n\n🔗 <a href='{full_link}'>Read Full Release</a>"
                         send_telegram_msg(msg)
-                        
-                        with open(FILE_NAME, "a") as f:
-                            f.write(rns_id + "\n")
-                        last_seen.add(rns_id)
+                        # (Save to file logic here)
                         news_found += 1
         
-        print(f"Scan complete. Found {news_found} new items.")
+        print(f"Scan complete. Found {news_found} items.")
 
     except Exception as e:
-        print(f"BeautifulSoup Error: {e}")
+        print(f"Error: {e}")
 
 # ... (Keep your sync_commands() and add_ticker_to_github() from the previous post) ...
 

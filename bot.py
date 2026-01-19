@@ -7,35 +7,42 @@ from urllib.parse import urljoin
 
 # --- CONFIGURATION ---
 TOKEN = os.getenv("TELEGRAM_TOKEN")
-CHAT_ID_STR = os.getenv("TELEGRAM_CHAT_ID", "")
+NOTIFICATION_CHAT_ID = os.getenv("NOTIFICATION_CHAT_ID")
 FILE_NAME = "last_rns_ids.txt"
 TICKER_FILE = "tickers.txt"
 
 def load_tickers():
     if os.path.exists(TICKER_FILE):
         with open(TICKER_FILE, "r") as f:
-            return [line.strip().upper() for line in f if line.strip()]
+            lines = f.read().splitlines()
+            return [line.strip().upper() for line in lines if line.strip()]
     return []
 
 def send_telegram_msg(text):
-    chat_ids = CHAT_ID_STR.split(",") if CHAT_ID_STR else []
-    for chat_id in chat_ids:
-        url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-        params = {"chat_id": chat_id.strip(), "text": text, "parse_mode": "HTML"}
-        try:
-            requests.post(url, params=params, timeout=10)
-        except Exception as e:
-            print(f"Telegram error: {e}")
+    if not NOTIFICATION_CHAT_ID:
+        print("Error: NOTIFICATION_CHAT_ID not set.")
+        return
+    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+    params = {"chat_id": NOTIFICATION_CHAT_ID, "text": text, "parse_mode": "HTML"}
+    try:
+        res = requests.post(url, params=params, timeout=10)
+        if res.status_code != 200:
+            print(f"Telegram API Error: {res.text}")
+    except Exception as e:
+        print(f"Telegram connection error: {e}")
 
 def check_rns():
     tickers = load_tickers()
     if not tickers:
-        print("No tickers in watchlist.")
+        print("Watchlist is empty. No tickers to scan.")
         return
+    
+    print(f"Starting scan for tickers: {tickers}")
 
     base_url = "https://www.investegate.co.uk"
+    # Added perPage=300 to ensure we see the whole morning's news
     today_url = urljoin(base_url, "/today-announcements/?perPage=300")
-    headers = {'User-Agent': 'Mozilla/5.0'}
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
 
     if os.path.exists(FILE_NAME):
         with open(FILE_NAME, "r") as f:
@@ -47,7 +54,9 @@ def check_rns():
         response = requests.get(today_url, headers=headers, timeout=15)
         soup = BeautifulSoup(response.text, 'html.parser')
         table = soup.find('table')
-        if not table: return
+        if not table:
+            print("Could not find the announcements table on Investegate.")
+            return
         
         rows = table.find_all('tr')
         news_found = 0
@@ -57,30 +66,32 @@ def check_rns():
             if len(cols) < 4:
                 continue
             
-            company_raw = cols[2].get_text()
+            # Investegate Table: Col 2 is Company (Ticker), Col 3 is Announcement Title
+            company_raw = cols[2].get_text().upper()
             announcement_cell = cols[3]
             
             for ticker in tickers:
-                # Precise matching for (TICKER)
-                if re.search(rf'\({re.escape(ticker)}\)', company_raw.upper()):
+                # We search for the ticker inside parentheses, e.g., (VOD)
+                if re.search(rf'\({re.escape(ticker)}\)', company_raw):
                     link_tag = announcement_cell.find('a', href=True)
                     if not link_tag:
                         continue
                         
                     title = link_tag.get_text().strip()
                     full_link = urljoin(base_url, link_tag['href'])
+                    
+                    # Create unique ID for this specific RNS
                     rns_id = hashlib.md5(f"{ticker}{title}".encode()).hexdigest()
 
                     if rns_id not in last_seen:
-                        clean_ticker = ticker.strip()
-                        # Clean company name: remove newlines and everything after the bracket
                         clean_company = company_raw.split('(')[0].replace('\n', ' ').strip()
                         clean_company = re.sub(' +', ' ', clean_company)
                         
-                        msg = (f"📰 <b>#{clean_ticker} - {clean_company}</b>\n"
+                        msg = (f"📰 <b>#{ticker} - {clean_company}</b>\n"
                                f"{title}\n\n"
                                f"🔗 <a href='{full_link}'>Read Full Release</a>")
                         
+                        print(f"Match found! Sending alert for {ticker}")
                         send_telegram_msg(msg)
                         
                         with open(FILE_NAME, "a") as f:

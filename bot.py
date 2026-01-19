@@ -1,4 +1,5 @@
 import requests
+from bs4 import BeautifulSoup
 import os
 import base64
 from datetime import datetime

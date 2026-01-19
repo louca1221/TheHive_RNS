@@ -122,7 +122,7 @@ def check_rns():
     if not tickers: return
 
     base_url = "https://www.investegate.co.uk"
-    today_url = urljoin(base_url, "/today-announcements/")
+    today_url = urljoin(base_url, "today-announcements/?perPage=300")
     headers = {'User-Agent': 'Mozilla/5.0'}
 
     if os.path.exists(FILE_NAME):

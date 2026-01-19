@@ -1,7 +1,8 @@
 import requests
+from bs4 import BeautifulSoup
 import os
 import base64
-from datetime import datetime
+import hashlib
 
 # --- CONFIGURATION ---
 TOKEN = os.getenv("TELEGRAM_TOKEN")
@@ -24,137 +25,68 @@ def send_telegram_msg(text):
         params = {"chat_id": chat_id.strip(), "text": text, "parse_mode": "HTML"}
         requests.post(url, params=params)
 
-# TEMPORARY DEBUG LINE
-print(f"DEBUG: Token length is {len(GITHUB_TOKEN) if GITHUB_TOKEN else 0} characters.")
-
-# --- GITHUB API SYNC ---
-def add_ticker_to_github(ticker):
-    # FIRST: Check if the token actually exists in the script's memory
-    if not GITHUB_TOKEN:
-        send_telegram_msg("❌ Error: GH_PAT is missing from the script environment. Check your YAML file!")
-        return
-
-    file_url = f"https://api.github.com/repos/{REPO_NAME}/contents/{TICKER_FILE}"
-    
-    # Modern GitHub API headers
-    headers = {
-        "Authorization": f"Bearer {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28"
-    }
-    
-    # 1. Get the file
-    res = requests.get(file_url, headers=headers)
-    if res.status_code != 200:
-        send_telegram_msg(f"❌ Error {res.status_code}: Couldn't reach GitHub. Check REPO_NAME.")
-        return
-
-    data = res.json()
-    sha = data.get('sha')
-    current_content = base64.b64decode(data['content']).decode('utf-8')
-    
-    if ticker in current_content.split():
-        send_telegram_msg(f"ℹ️ {ticker} is already in your watchlist.")
-        return
-
-    # 2. Update the file
-    new_content = current_content.strip() + f"\n{ticker}"
-    payload = {
-        "message": f"Add {ticker} via Telegram",
-        "content": base64.b64encode(new_content.encode('utf-8')).decode('utf-8'),
-        "sha": sha
-    }
-    
-    put_res = requests.put(file_url, headers=headers, json=payload)
-    
-    if put_res.status_code == 200 or put_res.status_code == 201:
-        send_telegram_msg(f"✅ Successfully added <b>{ticker}</b> to watchlist")
-    else:
-        # This will tell you exactly why it failed (e.g., 401 = Bad Token, 403 = No Permission)
-        send_telegram_msg(f"❌ GitHub API Error: {put_res.status_code}\n{put_res.json().get('message')}")
-        
-def sync_commands():
-    url = f"https://api.telegram.org/bot{TOKEN}/getUpdates"
-    # We explicitly ask for channel_post updates
-    params = {"limit": 10, "timeout": 1, "allowed_updates": ["message", "channel_post"]}
-    
-    try:
-        response = requests.get(url, params=params).json()
-        updates = response.get("result", [])
-        
-        last_id = 0
-        for update in updates:
-            last_id = update.get("update_id")
-            
-            # Check both the 'message' bucket AND the 'channel_post' bucket
-            msg_data = update.get("message") or update.get("channel_post")
-            
-            if msg_data:
-                text = msg_data.get("text", "")
-                if text.startswith("/add "):
-                    ticker = text.replace("/add ", "").strip().upper()
-                    add_ticker_to_github(ticker)
-                elif text == "/list":
-                    tickers = load_tickers()
-                    msg = "📋 <b>Watchlist:</b>\n" + "\n".join([f"• {t}" for t in tickers])
-                    send_telegram_msg(msg)
-
-        if last_id > 0:
-            requests.get(url, params={"offset": last_id + 1})
-            
-    except Exception as e:
-        print(f"Sync Error: {e}")
-
-# --- MAIN RNS LOGIC ---
 def check_rns():
     tickers = load_tickers()
     if not tickers:
-        print("No tickers in watchlist.")
+        print("No tickers found.")
         return
 
-    # Using Investegate as it's often more stable for automated checks
+    # Investegate Latest RNS Page
     url = "https://www.investegate.co.uk/announcements/rns/latest/"
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    }
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+
+    # Load history
+    if os.path.exists(FILE_NAME):
+        with open(FILE_NAME, "r") as f:
+            last_seen = set(f.read().splitlines())
+    else:
+        last_seen = set()
 
     try:
         response = requests.get(url, headers=headers, timeout=15)
-        # We search for the ticker patterns in the HTML text
-        # This is a 'brute force' method that works even if the API changes
-        content = response.text
+        soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Look for existing IDs to avoid duplicates
-        if os.path.exists(FILE_NAME):
-            with open(FILE_NAME, "r") as f:
-                last_seen = set(f.read().splitlines())
-        else:
-            last_seen = set()
+        # Investegate usually stores news in a table. We search for rows.
+        # Note: We look for the ticker string (e.g., "(VOD)") inside the row text
+        news_found = 0
+        
+        # Find all table rows or news containers
+        rows = soup.find_all('tr') # Search standard table rows
+        
+        for row in rows:
+            row_text = row.get_text()
+            
+            for ticker in tickers:
+                # Pattern match for Ticker in brackets like (VOD)
+                if f"({ticker})" in row_text:
+                    link_tag = row.find('a', href=True)
+                    if not link_tag: continue
+                    
+                    title = link_tag.get_text().strip()
+                    path = link_tag['href']
+                    full_link = f"https://www.investegate.co.uk{path}"
+                    
+                    # Create a unique ID for this news item
+                    rns_id = hashlib.md5(f"{ticker}{title}".encode()).hexdigest()
 
-        for ticker in tickers:
-            # We search for the ticker in brackets like (VOD) or (BP.)
-            search_pattern = f"({ticker})"
-            if search_pattern in content:
-                # Find the news item related to this ticker
-                # This logic assumes the ticker and title are close together in the HTML
-                # We extract a snippet around the ticker for the notification
-                start_index = content.find(search_pattern)
-                snippet = content[max(0, start_index-100) : start_index+200]
-                
-                # Create a unique ID based on the snippet to prevent double-posting
-                import hashlib
-                rns_id = hashlib.md5(snippet.encode()).hexdigest()
-
-                if rns_id not in last_seen:
-                    msg = f"🔔 <b>Possible RNS: {ticker}</b>\nCheck latest on Investegate.\n\n🔗 <a href='{url}'>View Latest News</a>"
-                    send_telegram_msg(msg)
-                    with open(FILE_NAME, "a") as f:
-                        f.write(rns_id + "\n")
-                    print(f"Match found for {ticker}")
+                    if rns_id not in last_seen:
+                        msg = (f"🔔 <b>New RNS: {ticker}</b>\n"
+                               f"{title}\n\n"
+                               f"🔗 <a href='{full_link}'>Read Full Release</a>")
+                        send_telegram_msg(msg)
+                        
+                        with open(FILE_NAME, "a") as f:
+                            f.write(rns_id + "\n")
+                        last_seen.add(rns_id)
+                        news_found += 1
+        
+        print(f"Scan complete. Found {news_found} new items.")
 
     except Exception as e:
-        print(f"Scraping Error: {e}")
+        print(f"BeautifulSoup Error: {e}")
+
+# ... (Keep your sync_commands() and add_ticker_to_github() from the previous post) ...
 
 if __name__ == "__main__":
-    sync_commands() # Update tickers first
-    check_rns()     # Then scan for news
+    # sync_commands() # Uncomment if your PAT/Telegram-Add logic is fixed
+    check_rns()

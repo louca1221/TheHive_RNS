@@ -138,7 +138,7 @@ def check_rns():
                         
                     title = link_tag.get_text().strip()
                     path = link_tag['href']
-                    full_link = f"https://www.investegate.co.uk{path}"
+                    full_link = f"{path}"
                     
                     # Create unique ID based on ticker and title
                     rns_id = hashlib.md5(f"{ticker}{title}".encode()).hexdigest()

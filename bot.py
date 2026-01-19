@@ -5,6 +5,7 @@ import base64
 import hashlib
 from datetime import datetime
 from urllib.parse import urljoin
+import re
 
 # --- CONFIGURATION ---
 TOKEN = os.getenv("TELEGRAM_TOKEN")
@@ -180,21 +181,20 @@ def check_rns():
         news_found = 0
 
         for row in rows:
-            # Get all cells (td) in the row
-            cols = row.find_all('td')
-            if len(cols) < 4: continue # Skip header or empty rows
-            
-            # Investegate Table Structure:
-            # Col 0: Time | Col 1: Source | Col 2: Company | Col 3: Announcement
-            company_text = cols[2].get_text().upper()
-            announcement_cell = cols[3]
-            
-            for ticker in tickers:
-                # Check if ticker is in the Company name column
-                if ticker in company_text:
-                    # WE WANT THE LINK FROM THE ANNOUNCEMENT COLUMN (Col 3)
-                    link_tag = announcement_cell.find('a', href=True)
-                    if not link_tag: continue
+        cols = row.find_all('td')
+        if len(cols) < 4: continue
+        
+        company_text = cols[2].get_text().upper()
+        announcement_cell = cols[3]
+        
+        for ticker in tickers:
+            # --- THE FIX: REGEX WORD BOUNDARIES ---
+            # \b matches the beginning or end of a word.
+            # This ensures 'PRE' matches 'PRE' but NOT 'PRECISION'.
+            if re.search(rf'\b{re.escape(ticker)}\b', company_text):
+                
+                link_tag = announcement_cell.find('a', href=True)
+                if not link_tag: continue
                         
                     title = link_tag.get_text().strip()
                     relative_path = link_tag['href']

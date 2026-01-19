@@ -34,7 +34,7 @@ def send_telegram_msg(text):
 # --- GITHUB API SYNC ---
 def add_ticker_to_github(ticker):
     if not GITHUB_TOKEN:
-        send_telegram_msg("❌ Error: GH_PAT is missing. Check your YAML!")
+        send_telegram_msg("❌ Error: GH_PAT is missing.")
         return
 
     file_url = f"https://api.github.com/repos/{REPO_NAME}/contents/{TICKER_FILE}"
@@ -46,7 +46,7 @@ def add_ticker_to_github(ticker):
     
     res = requests.get(file_url, headers=headers)
     if res.status_code != 200:
-        send_telegram_msg(f"❌ Error {res.status_code}: Couldn't reach GitHub repo.")
+        send_telegram_msg(f"❌ Error {res.status_code}: Couldn't reach GitHub.")
         return
 
     data = res.json()
@@ -64,104 +64,66 @@ def add_ticker_to_github(ticker):
         "sha": sha
     }
     
-    put_res = requests.put(file_url, headers=headers, json=payload)
-    if put_res.status_code in [200, 201]:
-        send_telegram_msg(f"✅ Successfully added <b>{ticker}</b> to watchlist.")
-    else:
-        send_telegram_msg(f"❌ GitHub Error: {put_res.status_code}")
+    requests.put(file_url, headers=headers, json=payload)
+    send_telegram_msg(f"✅ Added <b>{ticker}</b>.")
 
 def remove_ticker_from_github(ticker_to_remove):
-    if not GITHUB_TOKEN:
-        send_telegram_msg("❌ Error: GH_PAT is missing.")
-        return
-
     file_url = f"https://api.github.com/repos/{REPO_NAME}/contents/{TICKER_FILE}"
-    headers = {
-        "Authorization": f"Bearer {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28"
-    }
+    headers = {"Authorization": f"Bearer {GITHUB_TOKEN}"}
     
-    # 1. Get current file content
     res = requests.get(file_url, headers=headers)
-    if res.status_code != 200:
-        send_telegram_msg("❌ Error: Could not fetch tickers for removal.")
-        return
+    if res.status_code != 200: return
 
     data = res.json()
     sha = data.get('sha')
     current_tickers = base64.b64decode(data['content']).decode('utf-8').splitlines()
     
-    # 2. Filter out the ticker (case-insensitive)
     updated_tickers = [t.strip().upper() for t in current_tickers if t.strip().upper() != ticker_to_remove]
     
     if len(updated_tickers) == len(current_tickers):
-        send_telegram_msg(f"ℹ️ <b>{ticker_to_remove}</b> was not found in your list.")
+        send_telegram_msg(f"ℹ️ {ticker_to_remove} not found.")
         return
 
-    # 3. Push updated list back to GitHub
-    new_content_str = "\n".join(updated_tickers)
     payload = {
         "message": f"Remove {ticker_to_remove} via Telegram",
-        "content": base64.b64encode(new_content_str.encode('utf-8')).decode('utf-8'),
+        "content": base64.b64encode("\n".join(updated_tickers).encode('utf-8')).decode('utf-8'),
         "sha": sha
     }
-    
-    put_res = requests.put(file_url, headers=headers, json=payload)
-    if put_res.status_code == 200:
-        send_telegram_msg(f"✅ Successfully removed <b>{ticker_to_remove}</b> from watchlist.")
-    else:
-        send_telegram_msg(f"❌ Failed to update GitHub. Code: {put_res.status_code}")
+    requests.put(file_url, headers=headers, json=payload)
+    send_telegram_msg(f"✅ Removed <b>{ticker_to_remove}</b>.")
 
 def sync_commands():
     url = f"https://api.telegram.org/bot{TOKEN}/getUpdates"
-    params = {"limit": 10, "timeout": 1, "allowed_updates": ["message", "channel_post"]}
-    
     try:
-        response = requests.get(url, params=params).json()
+        response = requests.get(url, params={"limit": 10, "timeout": 1}).json()
         updates = response.get("result", [])
-        
         last_id = 0
         for update in updates:
             last_id = update.get("update_id")
             msg_data = update.get("message") or update.get("channel_post")
-            
             if msg_data:
                 text = msg_data.get("text", "")
-                
-                # --- ADD COMMAND ---
                 if text.startswith("/add "):
-                    ticker = text.replace("/add ", "").strip().upper()
-                    add_ticker_to_github(ticker)
-                
-                # --- REMOVE COMMAND ---
+                    add_ticker_to_github(text.replace("/add ", "").strip().upper())
                 elif text.startswith("/remove "):
-                    ticker = text.replace("/remove ", "").strip().upper()
-                    remove_ticker_from_github(ticker)
-                
-                # --- LIST COMMAND ---
+                    remove_ticker_from_github(text.replace("/remove ", "").strip().upper())
                 elif text == "/list":
                     tickers = load_tickers()
                     msg = "📋 <b>Watchlist:</b>\n" + "\n".join([f"• {t}" for t in tickers])
                     send_telegram_msg(msg)
-
         if last_id > 0:
             requests.get(url, params={"offset": last_id + 1})
-            
     except Exception as e:
         print(f"Sync Error: {e}")
 
 # --- RNS SCRAPER ---
-
 def check_rns():
     tickers = load_tickers()
     if not tickers: return
 
     base_url = "https://www.investegate.co.uk"
     today_url = urljoin(base_url, "/today-announcements/")
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    }
+    headers = {'User-Agent': 'Mozilla/5.0'}
 
     if os.path.exists(FILE_NAME):
         with open(FILE_NAME, "r") as f:
@@ -172,7 +134,6 @@ def check_rns():
     try:
         response = requests.get(today_url, headers=headers, timeout=15)
         soup = BeautifulSoup(response.text, 'html.parser')
-        
         table = soup.find('table')
         if not table: return
         
@@ -181,42 +142,33 @@ def check_rns():
 
         for row in rows:
             cols = row.find_all('td')
-            if len(cols) < 4: 
-                continue
+            if len(cols) < 4: continue
             
             company_text = cols[2].get_text().upper()
             announcement_cell = cols[3]
             
             for ticker in tickers:
-                # Exact word matching using Regex
+                # regex word boundary fix
                 if re.search(rf'\b{re.escape(ticker)}\b', company_text):
                     link_tag = announcement_cell.find('a', href=True)
-                    if not link_tag: 
-                        continue
+                    if not link_tag: continue
                         
                     title = link_tag.get_text().strip()
-                    relative_path = link_tag['href']
-                    full_link = urljoin(base_url, relative_path)
-                    
+                    full_link = urljoin(base_url, link_tag['href'])
                     rns_id = hashlib.md5(f"{ticker}{title}".encode()).hexdigest()
 
                     if rns_id not in last_seen:
-                        msg = (f"🔔 <b>New RNS: {ticker}</b>\n"
-                               f"{title}\n\n"
-                               f"🔗 <a href='{full_link}'>Read Full Release</a>")
+                        msg = f"🔔 <b>New RNS: {ticker}</b>\n{title}\n\n🔗 <a href='{full_link}'>Read Full Release</a>"
                         send_telegram_msg(msg)
-                        
                         with open(FILE_NAME, "a") as f:
                             f.write(rns_id + "\n")
                         last_seen.add(rns_id)
                         news_found += 1
         
         print(f"Scan complete. Found {news_found} new items.")
-
     except Exception as e:
         print(f"Scraper Error: {e}")
 
 if __name__ == "__main__":
-    print(f"DEBUG: Token length is {len(GITHUB_TOKEN) if GITHUB_TOKEN else 0}")
     sync_commands() 
     check_rns()

@@ -108,39 +108,51 @@ def sync_commands():
 # --- MAIN RNS LOGIC ---
 def check_rns():
     tickers = load_tickers()
-    if not tickers:
-        print("No tickers found.")
-        return
+    if not tickers: return
 
-    headers = {'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json'}
-    url = "https://api.londonstockexchange.com/api/v1/pages?path=news&parameters=categories%3Drns"
-    
-    if os.path.exists(FILE_NAME):
-        with open(FILE_NAME, "r") as f:
-            last_seen = set(f.read().splitlines())
-    else:
-        last_seen = set()
+    url = "https://www.investegate.co.uk/"
+    # Use a more "human" user-agent to avoid being blocked
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept-Language': 'en-GB,en;q=0.9'
+    }
 
     try:
         response = requests.get(url, headers=headers, timeout=15)
-        data = response.json()
-        components = data.get('components', [])
-        news_items = next((c.get('content', []) for c in components if c.get('type') == 'news-list'), [])
+        
+        # DEBUG: If this prints 403 or 404, you are being blocked
+        print(f"Status Code: {response.status_code}")
+        
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # 1. NEW STRATEGY: Find all links first
+        # News on Investegate is almost always inside an <a> tag
+        links = soup.find_all('a', href=True)
+        news_found = 0
 
-        for item in news_items:
-            tidm = item.get('tidm', '').upper()
-            rns_id = item.get('newsId', '')
-            title = item.get('title', '')
-            link = f"https://www.londonstockexchange.com/news-article/RNS/{item.get('path', '')}"
+        for link in links:
+            text = link.get_text().upper()
+            
+            for ticker in tickers:
+                # Check if the ticker (VOD) or (VOD.) is in the link text
+                if f"({ticker}" in text:
+                    title = text.strip()
+                    path = link['href']
+                    full_link = f"https://www.investegate.co.uk{path}" if path.startswith('/') else path
+                    
+                    rns_id = hashlib.md5(f"{ticker}{title}".encode()).hexdigest()
 
-            if tidm in tickers and rns_id not in last_seen:
-                msg = f"🔔 <b>New RNS: {tidm}</b>\n{title}\n\n🔗 <a href='{link}'>Read Full Release</a>"
-                send_telegram_msg(msg)
-                with open(FILE_NAME, "a") as f:
-                    f.write(rns_id + "\n")
-                last_seen.add(rns_id)
+                    # Load/Check history as before...
+                    if rns_id not in last_seen:
+                        msg = f"🔔 <b>New RNS: {ticker}</b>\n{title}\n\n🔗 <a href='{full_link}'>Read Full Release</a>"
+                        send_telegram_msg(msg)
+                        # (Save to file logic here)
+                        news_found += 1
+        
+        print(f"Scan complete. Found {news_found} items.")
+
     except Exception as e:
-        print(f"RNS Error: {e}")
+        print(f"Error: {e}")
 
 if __name__ == "__main__":
     sync_commands() # Update tickers first

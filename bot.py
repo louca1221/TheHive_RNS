@@ -102,15 +102,14 @@ def sync_commands():
 # --- RNS SCRAPER ---
 from urllib.parse import urljoin  # Add this at the very top of your script
 
+from urllib.parse import urljoin
+
 def check_rns():
     tickers = load_tickers()
-    if not tickers:
-        print("No tickers found.")
-        return
+    if not tickers: return
 
-    # Using the 'Today' URL
     base_url = "https://www.investegate.co.uk"
-    today_url = f"{base_url}/today-announcements/"
+    today_url = urljoin(base_url, "/today-announcements/")
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     }
@@ -125,30 +124,38 @@ def check_rns():
         response = requests.get(today_url, headers=headers, timeout=15)
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Target table rows
-        rows = soup.find_all('tr')
+        # We find the main table first to be more precise
+        table = soup.find('table')
+        if not table: return
+        
+        rows = table.find_all('tr')
         news_found = 0
 
         for row in rows:
-            row_text = row.get_text().upper()
+            # Get all cells (td) in the row
+            cols = row.find_all('td')
+            if len(cols) < 4: continue # Skip header or empty rows
+            
+            # Investegate Table Structure:
+            # Col 0: Time | Col 1: Source | Col 2: Company | Col 3: Announcement
+            company_text = cols[2].get_text().upper()
+            announcement_cell = cols[3]
             
             for ticker in tickers:
-                if ticker in row_text:
-                    link_tag = row.find('a', href=True)
-                    if not link_tag:
-                        continue
+                # Check if ticker is in the Company name column
+                if ticker in company_text:
+                    # WE WANT THE LINK FROM THE ANNOUNCEMENT COLUMN (Col 3)
+                    link_tag = announcement_cell.find('a', href=True)
+                    if not link_tag: continue
                         
                     title = link_tag.get_text().strip()
                     relative_path = link_tag['href']
-                    
-                    # --- THE FIX IS HERE ---
-                    # urljoin correctly combines 'https://www.investegate.co.uk' with '/announcement/...'
                     full_link = urljoin(base_url, relative_path)
                     
                     rns_id = hashlib.md5(f"{ticker}{title}".encode()).hexdigest()
 
                     if rns_id not in last_seen:
-                        msg = (f"🔔 <b>Today's RNS: {ticker}</b>\n"
+                        msg = (f"🔔 <b>New RNS: {ticker}</b>\n"
                                f"{title}\n\n"
                                f"🔗 <a href='{full_link}'>Read Full Release</a>")
                         send_telegram_msg(msg)

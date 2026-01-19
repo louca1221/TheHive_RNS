@@ -173,30 +173,26 @@ def check_rns():
         response = requests.get(today_url, headers=headers, timeout=15)
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # We find the main table first to be more precise
         table = soup.find('table')
         if not table: return
         
         rows = table.find_all('tr')
         news_found = 0
 
-        # Corrected indentation for the loop body
         for row in rows:
-            cols = row.find_all('td')  # Indented 4 spaces
+            cols = row.find_all('td')
             if len(cols) < 4: 
-                continue               # Indented 4 more spaces
+                continue
             
             company_text = cols[2].get_text().upper()
             announcement_cell = cols[3]
             
             for ticker in tickers:
-                # Use regex for word boundaries
+                # Exact word matching using Regex
                 if re.search(rf'\b{re.escape(ticker)}\b', company_text):
                     link_tag = announcement_cell.find('a', href=True)
                     if not link_tag: 
                         continue
-                    
-                    # ... the rest of the logic follows the same pattern ...
                         
                     title = link_tag.get_text().strip()
                     relative_path = link_tag['href']

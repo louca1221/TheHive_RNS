@@ -157,13 +157,19 @@ def check_rns():
                     full_link = urljoin(base_url, link_tag['href'])
                     rns_id = hashlib.md5(f"{ticker}{title}".encode()).hexdigest()
 
-                    if rns_id not in last_seen:
-                        msg = f"📰 <b>New RNS: #{ticker}-{company_text}</b>\n{title}\n\n🔗 <a href='{full_link}'>Read Full Release</a>"
-                        send_telegram_msg(msg)
-                        with open(FILE_NAME, "a") as f:
-                            f.write(rns_id + "\n")
-                        last_seen.add(rns_id)
-                        news_found += 1
+                   if rns_id not in last_seen:
+    # .strip() removes hidden newlines or extra spaces that cause line breaks
+    clean_ticker = ticker.strip()
+    clean_company = company_text.strip()
+    
+    # Combined into one clean line
+    msg = f"📰 <b>New RNS: #{clean_ticker} - {clean_company}</b>\n{title}\n\n🔗 <a href='{full_link}'>Read Full Release</a>"
+    
+    send_telegram_msg(msg)
+    with open(FILE_NAME, "a") as f:
+        f.write(rns_id + "\n")
+    last_seen.add(rns_id)
+    news_found += 1
         
         print(f"Scan complete. Found {news_found} new items.")
     except Exception as e:

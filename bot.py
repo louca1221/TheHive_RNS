@@ -151,9 +151,6 @@ def sync_commands():
         print(f"Sync Error: {e}")
 
 # --- RNS SCRAPER ---
-from urllib.parse import urljoin  # Add this at the very top of your script
-
-from urllib.parse import urljoin
 
 def check_rns():
     tickers = load_tickers()

@@ -2,6 +2,7 @@ import requests
 from bs4 import BeautifulSoup
 import os
 import base64
+import hashlib
 from datetime import datetime
 
 # --- CONFIGURATION ---
@@ -23,31 +24,27 @@ def send_telegram_msg(text):
     for chat_id in chat_ids:
         url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
         params = {"chat_id": chat_id.strip(), "text": text, "parse_mode": "HTML"}
-        requests.post(url, params=params)
-
-# TEMPORARY DEBUG LINE
-print(f"DEBUG: Token length is {len(GITHUB_TOKEN) if GITHUB_TOKEN else 0} characters.")
+        try:
+            requests.post(url, params=params, timeout=10)
+        except Exception as e:
+            print(f"Telegram error: {e}")
 
 # --- GITHUB API SYNC ---
 def add_ticker_to_github(ticker):
-    # FIRST: Check if the token actually exists in the script's memory
     if not GITHUB_TOKEN:
-        send_telegram_msg("❌ Error: GH_PAT is missing from the script environment. Check your YAML file!")
+        send_telegram_msg("❌ Error: GH_PAT is missing. Check your YAML!")
         return
 
     file_url = f"https://api.github.com/repos/{REPO_NAME}/contents/{TICKER_FILE}"
-    
-    # Modern GitHub API headers
     headers = {
         "Authorization": f"Bearer {GITHUB_TOKEN}",
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28"
     }
     
-    # 1. Get the file
     res = requests.get(file_url, headers=headers)
     if res.status_code != 200:
-        send_telegram_msg(f"❌ Error {res.status_code}: Couldn't reach GitHub. Check REPO_NAME.")
+        send_telegram_msg(f"❌ Error {res.status_code}: Couldn't reach GitHub repo.")
         return
 
     data = res.json()
@@ -58,7 +55,6 @@ def add_ticker_to_github(ticker):
         send_telegram_msg(f"ℹ️ {ticker} is already in your watchlist.")
         return
 
-    # 2. Update the file
     new_content = current_content.strip() + f"\n{ticker}"
     payload = {
         "message": f"Add {ticker} via Telegram",
@@ -67,16 +63,13 @@ def add_ticker_to_github(ticker):
     }
     
     put_res = requests.put(file_url, headers=headers, json=payload)
-    
-    if put_res.status_code == 200 or put_res.status_code == 201:
-        send_telegram_msg(f"✅ Successfully added <b>{ticker}</b> to watchlist")
+    if put_res.status_code in [200, 201]:
+        send_telegram_msg(f"✅ Successfully added <b>{ticker}</b> to watchlist.")
     else:
-        # This will tell you exactly why it failed (e.g., 401 = Bad Token, 403 = No Permission)
-        send_telegram_msg(f"❌ GitHub API Error: {put_res.status_code}\n{put_res.json().get('message')}")
-        
+        send_telegram_msg(f"❌ GitHub Error: {put_res.status_code}")
+
 def sync_commands():
     url = f"https://api.telegram.org/bot{TOKEN}/getUpdates"
-    # We explicitly ask for channel_post updates
     params = {"limit": 10, "timeout": 1, "allowed_updates": ["message", "channel_post"]}
     
     try:
@@ -86,8 +79,6 @@ def sync_commands():
         last_id = 0
         for update in updates:
             last_id = update.get("update_id")
-            
-            # Check both the 'message' bucket AND the 'channel_post' bucket
             msg_data = update.get("message") or update.get("channel_post")
             
             if msg_data:
@@ -101,33 +92,34 @@ def sync_commands():
                     send_telegram_msg(msg)
 
         if last_id > 0:
+            # This 'offset' clears the Telegram queue so commands don't loop
             requests.get(url, params={"offset": last_id + 1})
             
     except Exception as e:
         print(f"Sync Error: {e}")
 
-# --- MAIN RNS LOGIC ---
+# --- RNS SCRAPER ---
 def check_rns():
     tickers = load_tickers()
-    if not tickers: return
+    if not tickers:
+        print("No tickers to track.")
+        return
 
-    url = "https://www.investegate.co.uk/"
-    # Use a more "human" user-agent to avoid being blocked
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept-Language': 'en-GB,en;q=0.9'
-    }
+    # Targeting the LATEST RNS page (Fixed URL)
+    url = "https://www.investegate.co.uk/announcements/rns/latest/"
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+
+    if os.path.exists(FILE_NAME):
+        with open(FILE_NAME, "r") as f:
+            last_seen = set(f.read().splitlines())
+    else:
+        last_seen = set()
 
     try:
         response = requests.get(url, headers=headers, timeout=15)
-        
-        # DEBUG: If this prints 403 or 404, you are being blocked
-        print(f"Status Code: {response.status_code}")
-        
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # 1. NEW STRATEGY: Find all links first
-        # News on Investegate is almost always inside an <a> tag
+        # Investegate news items are usually inside <a> tags
         links = soup.find_all('a', href=True)
         news_found = 0
 
@@ -135,26 +127,30 @@ def check_rns():
             text = link.get_text().upper()
             
             for ticker in tickers:
-                # Check if the ticker (VOD) or (VOD.) is in the link text
+                # Matches patterns like (VOD) or (VOD. to catch all LSE variations
                 if f"({ticker}" in text:
                     title = text.strip()
                     path = link['href']
                     full_link = f"https://www.investegate.co.uk{path}" if path.startswith('/') else path
                     
+                    # Create a unique ID to prevent duplicate alerts
                     rns_id = hashlib.md5(f"{ticker}{title}".encode()).hexdigest()
 
-                    # Load/Check history as before...
                     if rns_id not in last_seen:
                         msg = f"🔔 <b>New RNS: {ticker}</b>\n{title}\n\n🔗 <a href='{full_link}'>Read Full Release</a>"
                         send_telegram_msg(msg)
-                        # (Save to file logic here)
+                        
+                        with open(FILE_NAME, "a") as f:
+                            f.write(rns_id + "\n")
+                        last_seen.add(rns_id)
                         news_found += 1
         
-        print(f"Scan complete. Found {news_found} items.")
+        print(f"Scan complete. Found {news_found} new items.")
 
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Scraper Error: {e}")
 
 if __name__ == "__main__":
-    sync_commands() # Update tickers first
-    check_rns()     # Then scan for news
+    print(f"DEBUG: Token length is {len(GITHUB_TOKEN) if GITHUB_TOKEN else 0}")
+    sync_commands() 
+    check_rns()

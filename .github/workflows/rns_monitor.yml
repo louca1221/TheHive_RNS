@@ -28,7 +28,7 @@ jobs:
         run: |
           pip install requests beautifulsoup4
 
-      - name: Run Bot and Commands
+      - name: Run Scripts
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           COMMAND_CHAT_ID: ${{ secrets.COMMAND_CHAT_ID }}
@@ -36,6 +36,8 @@ jobs:
           GH_PAT: ${{ secrets.GH_PAT }}
         run: |
           python commands.py
+          # This line is key: it re-pulls the file commands.py just changed
+          git pull 
           python bot.py
 
       - name: Commit and push changes

@@ -102,12 +102,14 @@ def sync_commands():
 def check_rns():
     tickers = load_tickers()
     if not tickers:
-        print("No tickers to track.")
+        print("No tickers found.")
         return
 
-    # Targeting the LATEST RNS page (Fixed URL)
-    url = "https://www.investegate.co.uk/announcements/rns/latest/"
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+    # Using the 'Today' URL as requested
+    url = "https://www.investegate.co.uk/today-announcements/"
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    }
 
     if os.path.exists(FILE_NAME):
         with open(FILE_NAME, "r") as f:
@@ -119,25 +121,32 @@ def check_rns():
         response = requests.get(url, headers=headers, timeout=15)
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Investegate news items are usually inside <a> tags
-        links = soup.find_all('a', href=True)
+        # In the 'Today' table, each announcement is a row (tr)
+        rows = soup.find_all('tr')
         news_found = 0
 
-        for link in links:
-            text = link.get_text().upper()
+        for row in rows:
+            row_text = row.get_text().upper()
             
             for ticker in tickers:
-                # Matches patterns like (VOD) or (VOD. to catch all LSE variations
-                if f"({ticker}" in text:
-                    title = text.strip()
-                    path = link['href']
-                    full_link = f"https://www.investegate.co.uk{path}" if path.startswith('/') else path
+                # We search for the ticker anywhere in the row text
+                # Investegate often shows tickers as 'VOD' or 'VOD.'
+                if ticker in row_text:
+                    link_tag = row.find('a', href=True)
+                    if not link_tag:
+                        continue
+                        
+                    title = link_tag.get_text().strip()
+                    path = link_tag['href']
+                    full_link = f"https://www.investegate.co.uk{path}"
                     
-                    # Create a unique ID to prevent duplicate alerts
+                    # Create unique ID based on ticker and title
                     rns_id = hashlib.md5(f"{ticker}{title}".encode()).hexdigest()
 
                     if rns_id not in last_seen:
-                        msg = f"🔔 <b>New RNS: {ticker}</b>\n{title}\n\n🔗 <a href='{full_link}'>Read Full Release</a>"
+                        msg = (f"🔔 <b>Today's RNS: {ticker}</b>\n"
+                               f"{title}\n\n"
+                               f"🔗 <a href='{full_link}'>Read Full Release</a>")
                         send_telegram_msg(msg)
                         
                         with open(FILE_NAME, "a") as f:
@@ -145,7 +154,7 @@ def check_rns():
                         last_seen.add(rns_id)
                         news_found += 1
         
-        print(f"Scan complete. Found {news_found} new items.")
+        print(f"Scan complete. Found {news_found} new items on Today's page.")
 
     except Exception as e:
         print(f"Scraper Error: {e}")

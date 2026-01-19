@@ -131,26 +131,25 @@ def check_rns():
 
         for row in rows:
             cols = row.find_all('td')
-            if len(cols) < 4: continue
+            if len(cols) < 4: 
+                continue
             
             company_text = cols[2].get_text()
             announcement_cell = cols[3]
             
             for ticker in tickers:
-                # regex word boundary fix
                 if re.search(rf'\b{re.escape(ticker)}\b', company_text.upper()):
                     link_tag = announcement_cell.find('a', href=True)
-                    if not link_tag: continue
+                    if not link_tag: 
+                        continue
                         
                     title = link_tag.get_text().strip()
                     full_link = urljoin(base_url, link_tag['href'])
                     rns_id = hashlib.md5(f"{ticker}{title}".encode()).hexdigest()
 
                     if rns_id not in last_seen:
-                        # CLEANING: Remove hidden newlines and collapse extra spaces
                         clean_ticker = ticker.strip()
                         clean_company = company_text.replace('\n', ' ').strip()
-                        # Use re.sub to change multiple spaces into one single space
                         clean_company = re.sub(' +', ' ', clean_company)
                         
                         msg = (f"📰 <b>New RNS: #{clean_ticker} - {clean_company}</b>\n"

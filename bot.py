@@ -36,54 +36,43 @@ def add_ticker_to_github(ticker):
     if not GITHUB_TOKEN:
         send_telegram_msg("❌ Error: GH_PAT is missing.")
         return
-
     file_url = f"https://api.github.com/repos/{REPO_NAME}/contents/{TICKER_FILE}"
     headers = {
         "Authorization": f"Bearer {GITHUB_TOKEN}",
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28"
     }
-    
     res = requests.get(file_url, headers=headers)
     if res.status_code != 200:
         send_telegram_msg(f"❌ Error {res.status_code}: Couldn't reach GitHub.")
         return
-
     data = res.json()
     sha = data.get('sha')
     current_content = base64.b64decode(data['content']).decode('utf-8')
-    
     if ticker in current_content.split():
         send_telegram_msg(f"ℹ️ {ticker} is already in your watchlist.")
         return
-
     new_content = current_content.strip() + f"\n{ticker}"
     payload = {
         "message": f"Add {ticker} via Telegram",
         "content": base64.b64encode(new_content.encode('utf-8')).decode('utf-8'),
         "sha": sha
     }
-    
     requests.put(file_url, headers=headers, json=payload)
     send_telegram_msg(f"✅ Added <b>{ticker}</b>.")
 
 def remove_ticker_from_github(ticker_to_remove):
     file_url = f"https://api.github.com/repos/{REPO_NAME}/contents/{TICKER_FILE}"
     headers = {"Authorization": f"Bearer {GITHUB_TOKEN}"}
-    
     res = requests.get(file_url, headers=headers)
     if res.status_code != 200: return
-
     data = res.json()
     sha = data.get('sha')
     current_tickers = base64.b64decode(data['content']).decode('utf-8').splitlines()
-    
     updated_tickers = [t.strip().upper() for t in current_tickers if t.strip().upper() != ticker_to_remove]
-    
     if len(updated_tickers) == len(current_tickers):
         send_telegram_msg(f"ℹ️ {ticker_to_remove} not found.")
         return
-
     payload = {
         "message": f"Remove {ticker_to_remove} via Telegram",
         "content": base64.b64encode("\n".join(updated_tickers).encode('utf-8')).decode('utf-8'),
@@ -122,7 +111,7 @@ def check_rns():
     if not tickers: return
 
     base_url = "https://www.investegate.co.uk"
-    today_url = urljoin(base_url, "today-announcements/?perPage=300")
+    today_url = urljoin(base_url, "/today-announcements/?perPage=300")
     headers = {'User-Agent': 'Mozilla/5.0'}
 
     if os.path.exists(FILE_NAME):
@@ -144,12 +133,12 @@ def check_rns():
             cols = row.find_all('td')
             if len(cols) < 4: continue
             
-            company_text = cols[2].get_text().upper()
+            company_text = cols[2].get_text()
             announcement_cell = cols[3]
             
             for ticker in tickers:
                 # regex word boundary fix
-                if re.search(rf'\b{re.escape(ticker)}\b', company_text):
+                if re.search(rf'\b{re.escape(ticker)}\b', company_text.upper()):
                     link_tag = announcement_cell.find('a', href=True)
                     if not link_tag: continue
                         
@@ -157,19 +146,23 @@ def check_rns():
                     full_link = urljoin(base_url, link_tag['href'])
                     rns_id = hashlib.md5(f"{ticker}{title}".encode()).hexdigest()
 
-       if rns_id not in last_seen:
-    # .strip() removes hidden newlines or extra spaces that cause line breaks
-            clean_ticker = ticker.strip()
-            clean_company = company_text.strip()
-    
-    # Combined into one clean line
-            msg = f"📰 <b>New RNS: #{clean_ticker} - {clean_company}</b>\n{title}\n\n🔗 <a href='{full_link}'>Read Full Release</a>"
-    
-    send_telegram_msg(msg)
-    with open(FILE_NAME, "a") as f:
-            f.write(rns_id + "\n")
-            last_seen.add(rns_id)
-            news_found += 1
+                    if rns_id not in last_seen:
+                        # CLEANING: Remove hidden newlines and collapse extra spaces
+                        clean_ticker = ticker.strip()
+                        clean_company = company_text.replace('\n', ' ').strip()
+                        # Use re.sub to change multiple spaces into one single space
+                        clean_company = re.sub(' +', ' ', clean_company)
+                        
+                        msg = (f"📰 <b>New RNS: #{clean_ticker} - {clean_company}</b>\n"
+                               f"{title}\n\n"
+                               f"🔗 <a href='{full_link}'>Read Full Release</a>")
+                        
+                        send_telegram_msg(msg)
+                        
+                        with open(FILE_NAME, "a") as f:
+                            f.write(rns_id + "\n")
+                        last_seen.add(rns_id)
+                        news_found += 1
         
         print(f"Scan complete. Found {news_found} new items.")
     except Exception as e:

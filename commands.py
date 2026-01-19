@@ -72,18 +72,25 @@ def handle_commands():
             else:
                 current_tickers = []
 
-            # Command: /ADD TICKER
+            # Command: /ADD TICKER (or TICKER1, TICKER2)
             if text.upper().startswith("/ADD "):
-                ticker = text[5:].strip().upper()
-                if ticker and ticker not in current_tickers:
-                    current_tickers.append(ticker)
-                    status = update_github_file("\n".join(current_tickers), f"Add {ticker} via Telegram")
+                # Get the part after /add and split by commas
+                raw_input = text[5:].strip().upper()
+                new_tickers = [t.strip() for t in raw_input.split(",") if t.strip()]
+                
+                added_list = []
+                for ticker in new_tickers:
+                    if ticker not in current_tickers:
+                        current_tickers.append(ticker)
+                        added_list.append(ticker)
+                
+                if added_list:
+                    # Update GitHub once with the full new list
+                    status = update_github_file("\n".join(current_tickers), f"Bulk add {added_list}")
                     if status in [200, 201]:
-                        send_telegram_msg(current_chat_id, f"✅ Added <b>{ticker}</b> to watchlist.")
-                    else:
-                        send_telegram_msg(current_chat_id, f"❌ GitHub Error: {status}")
+                        send_telegram_msg(current_chat_id, f"✅ Added: <b>{', '.join(added_list)}</b>")
                 else:
-                    send_telegram_msg(current_chat_id, f"ℹ️ {ticker} is already in list or invalid.")
+                    send_telegram_msg(current_chat_id, "ℹ️ No new tickers added (already in list or invalid).")
 
             # Command: /REMOVE TICKER
             elif text.upper().startswith("/REMOVE "):

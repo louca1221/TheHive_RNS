@@ -112,7 +112,8 @@ def check_rns():
             announcement_cell = cols[3]
             
             for ticker in tickers:
-                if re.search(rf'\b{re.escape(ticker)}\b', company_raw.upper()):
+                # Look for (TICKER) specifically
+                if re.search(rf'\({re.escape(ticker)}\)', company_raw.upper()):
                     link_tag = announcement_cell.find('a', href=True)
                     if not link_tag:
                         continue
@@ -123,10 +124,10 @@ def check_rns():
 
                     if rns_id not in last_seen:
                         clean_ticker = ticker.strip()
-                        clean_company = company_raw.replace('\n', ' ').strip()
-                        clean_company = re.sub(' +', ' ', clean_company)
+                        # Extract name before the bracket
+                        clean_company = company_raw.split('(')[0].strip()
                         
-                        msg = (f"📰 <b>New RNS: #{clean_ticker} - {clean_company}</b>\n"
+                        msg = (f"📰 <b>#{clean_ticker} - {clean_company}</b>\n"
                                f"{title}\n\n"
                                f"🔗 <a href='{full_link}'>Read Full Release</a>")
                         
@@ -140,7 +141,7 @@ def check_rns():
         print(f"Scan complete. Found {news_found} new items.")
     except Exception as e:
         print(f"Scraper Error: {e}")
-
+        
 if __name__ == "__main__":
     sync_commands() 
     check_rns()

@@ -157,12 +157,12 @@ def check_rns():
                                f"🔗 <a href='{full_link}'>Read Full Release</a>")
                         
                         send_telegram_msg(msg)
-                        
+
                         with open(FILE_NAME, "a") as f:
                             f.write(rns_id + "\n")
-                        last_seen.add(rns_id)
-                        news_found += 1
-        
+                            last_seen.add(rns_id)
+                            news_found += 1
+
         print(f"Scan complete. Found {news_found} new items.")
     except Exception as e:
         print(f"Scraper Error: {e}")

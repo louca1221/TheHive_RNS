@@ -109,38 +109,51 @@ def sync_commands():
 def check_rns():
     tickers = load_tickers()
     if not tickers:
-        print("No tickers found.")
+        print("No tickers in watchlist.")
         return
 
-    headers = {'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json'}
-    url = "https://api.londonstockexchange.com/api/v1/pages?path=news&parameters=categories%3Drns"
-    
-    if os.path.exists(FILE_NAME):
-        with open(FILE_NAME, "r") as f:
-            last_seen = set(f.read().splitlines())
-    else:
-        last_seen = set()
+    # Using Investegate as it's often more stable for automated checks
+    url = "https://www.investegate.co.uk/announcements/rns/latest/"
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    }
 
     try:
         response = requests.get(url, headers=headers, timeout=15)
-        data = response.json()
-        components = data.get('components', [])
-        news_items = next((c.get('content', []) for c in components if c.get('type') == 'news-list'), [])
+        # We search for the ticker patterns in the HTML text
+        # This is a 'brute force' method that works even if the API changes
+        content = response.text
+        
+        # Look for existing IDs to avoid duplicates
+        if os.path.exists(FILE_NAME):
+            with open(FILE_NAME, "r") as f:
+                last_seen = set(f.read().splitlines())
+        else:
+            last_seen = set()
 
-        for item in news_items:
-            tidm = item.get('tidm', '').upper()
-            rns_id = item.get('newsId', '')
-            title = item.get('title', '')
-            link = f"https://www.londonstockexchange.com/news-article/RNS/{item.get('path', '')}"
+        for ticker in tickers:
+            # We search for the ticker in brackets like (VOD) or (BP.)
+            search_pattern = f"({ticker})"
+            if search_pattern in content:
+                # Find the news item related to this ticker
+                # This logic assumes the ticker and title are close together in the HTML
+                # We extract a snippet around the ticker for the notification
+                start_index = content.find(search_pattern)
+                snippet = content[max(0, start_index-100) : start_index+200]
+                
+                # Create a unique ID based on the snippet to prevent double-posting
+                import hashlib
+                rns_id = hashlib.md5(snippet.encode()).hexdigest()
 
-            if tidm in tickers and rns_id not in last_seen:
-                msg = f"🔔 <b>New RNS: {tidm}</b>\n{title}\n\n🔗 <a href='{link}'>Read Full Release</a>"
-                send_telegram_msg(msg)
-                with open(FILE_NAME, "a") as f:
-                    f.write(rns_id + "\n")
-                last_seen.add(rns_id)
+                if rns_id not in last_seen:
+                    msg = f"🔔 <b>Possible RNS: {ticker}</b>\nCheck latest on Investegate.\n\n🔗 <a href='{url}'>View Latest News</a>"
+                    send_telegram_msg(msg)
+                    with open(FILE_NAME, "a") as f:
+                        f.write(rns_id + "\n")
+                    print(f"Match found for {ticker}")
+
     except Exception as e:
-        print(f"RNS Error: {e}")
+        print(f"Scraping Error: {e}")
 
 if __name__ == "__main__":
     sync_commands() # Update tickers first

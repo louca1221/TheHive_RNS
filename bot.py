@@ -69,6 +69,49 @@ def add_ticker_to_github(ticker):
     else:
         send_telegram_msg(f"❌ GitHub Error: {put_res.status_code}")
 
+def remove_ticker_from_github(ticker_to_remove):
+    if not GITHUB_TOKEN:
+        send_telegram_msg("❌ Error: GH_PAT is missing.")
+        return
+
+    file_url = f"https://api.github.com/repos/{REPO_NAME}/contents/{TICKER_FILE}"
+    headers = {
+        "Authorization": f"Bearer {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28"
+    }
+    
+    # 1. Get current file content
+    res = requests.get(file_url, headers=headers)
+    if res.status_code != 200:
+        send_telegram_msg("❌ Error: Could not fetch tickers for removal.")
+        return
+
+    data = res.json()
+    sha = data.get('sha')
+    current_tickers = base64.b64decode(data['content']).decode('utf-8').splitlines()
+    
+    # 2. Filter out the ticker (case-insensitive)
+    updated_tickers = [t.strip().upper() for t in current_tickers if t.strip().upper() != ticker_to_remove]
+    
+    if len(updated_tickers) == len(current_tickers):
+        send_telegram_msg(f"ℹ️ <b>{ticker_to_remove}</b> was not found in your list.")
+        return
+
+    # 3. Push updated list back to GitHub
+    new_content_str = "\n".join(updated_tickers)
+    payload = {
+        "message": f"Remove {ticker_to_remove} via Telegram",
+        "content": base64.b64encode(new_content_str.encode('utf-8')).decode('utf-8'),
+        "sha": sha
+    }
+    
+    put_res = requests.put(file_url, headers=headers, json=payload)
+    if put_res.status_code == 200:
+        send_telegram_msg(f"✅ Successfully removed <b>{ticker_to_remove}</b> from watchlist.")
+    else:
+        send_telegram_msg(f"❌ Failed to update GitHub. Code: {put_res.status_code}")
+
 def sync_commands():
     url = f"https://api.telegram.org/bot{TOKEN}/getUpdates"
     params = {"limit": 10, "timeout": 1, "allowed_updates": ["message", "channel_post"]}
@@ -84,16 +127,24 @@ def sync_commands():
             
             if msg_data:
                 text = msg_data.get("text", "")
+                
+                # --- ADD COMMAND ---
                 if text.startswith("/add "):
                     ticker = text.replace("/add ", "").strip().upper()
                     add_ticker_to_github(ticker)
+                
+                # --- REMOVE COMMAND ---
+                elif text.startswith("/remove "):
+                    ticker = text.replace("/remove ", "").strip().upper()
+                    remove_ticker_from_github(ticker)
+                
+                # --- LIST COMMAND ---
                 elif text == "/list":
                     tickers = load_tickers()
                     msg = "📋 <b>Watchlist:</b>\n" + "\n".join([f"• {t}" for t in tickers])
                     send_telegram_msg(msg)
 
         if last_id > 0:
-            # This 'offset' clears the Telegram queue so commands don't loop
             requests.get(url, params={"offset": last_id + 1})
             
     except Exception as e:

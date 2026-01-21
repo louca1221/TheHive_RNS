@@ -6,7 +6,9 @@ on:
     - cron: '*/15 8-15 * * 1-5'
     - cron: '*/5 15-18 * * 1-5'
   workflow_dispatch:
-
+  repository_dispatch:
+    types: [trigger-rns]
+    
 jobs:
   build:
     runs-on: ubuntu-latest

@@ -2,52 +2,58 @@ import requests
 from bs4 import BeautifulSoup
 import os
 import sys
+import time  # Added for a small delay between messages
 
 # Configuration from GitHub Secrets
 TOKEN = os.getenv("KOD_TOKEN")
-CHAT_ID = os.getenv("KOD_CHAT_ID")
+# Expects a comma-separated string like "12345,67890"
+CHAT_ID_STRING = os.getenv("KOD_CHAT_ID")
 ID_FILE = "kod_last_rns_id.txt"
 
 def send_telegram(message):
-    """Sends a message using HTML parse mode to avoid Markdown errors."""
+    """Sends a message to multiple chat IDs using HTML parse mode."""
+    if not TOKEN or not CHAT_ID_STRING:
+        print("ERROR: Missing TOKEN or CHAT_ID!")
+        return
+
+    # Split the string into a list of individual IDs
+    chat_ids = [id.strip() for id in CHAT_ID_STRING.split(",")]
+
     if len(message) > 4000:
         message = message[:3997] + "..."
         
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    payload = {
-        "chat_id": CHAT_ID, 
-        "text": message, 
-        "parse_mode": "HTML",
-        "disable_web_page_preview": False
-    }
-    try:
-        r = requests.post(url, data=payload)
-        r.raise_for_status()
-        print("DEBUG: Message sent successfully.")
-    except Exception as e:
-        print(f"ERROR: Telegram failed: {e}")
-        if hasattr(e, 'response') and e.response:
-            print(f"DEBUG: Telegram Error Details: {e.response.text}")
+    
+    for chat_id in chat_ids:
+        payload = {
+            "chat_id": chat_id, 
+            "text": message, 
+            "parse_mode": "HTML",
+            "disable_web_page_preview": False
+        }
+        try:
+            r = requests.post(url, data=payload)
+            r.raise_for_status()
+            print(f"DEBUG: Message sent successfully to {chat_id}.")
+            # Small sleep to prevent hitting Telegram's broadcast limits (30 msgs/sec)
+            time.sleep(0.1) 
+        except Exception as e:
+            print(f"ERROR: Telegram failed for {chat_id}: {e}")
+            if hasattr(e, 'response') and e.response:
+                print(f"DEBUG: Error Details: {e.response.text}")
 
 def get_ai_summary(detail_url):
-    """Visits the specific RNS page to extract the AI Summary text and cleans it."""
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+    """Visits the specific RNS page to extract and clean AI Summary text."""
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
     try:
         resp = requests.get(detail_url, headers=headers, timeout=10)
         soup = BeautifulSoup(resp.text, 'html.parser')
         
-        summary_div = soup.find('div', class_='ai-summary-content')
-        if not summary_div:
-            summary_div = soup.find('div', id='ai-summary')
+        summary_div = soup.find('div', class_='ai-summary-content') or soup.find('div', id='ai-summary')
             
         if summary_div:
             text = summary_div.get_text(strip=True)
-            
-            # REMOVE THE UNWANTED TEXT
-            # We use replace to swap that specific phrase with nothing
             text = text.replace("Summary by AIBETAClose X", "")
-            
-            # Clean up any leading/trailing whitespace left over
             return text.strip()
             
         return "<i>AI Summary not available for this release.</i>"
@@ -55,7 +61,7 @@ def get_ai_summary(detail_url):
         return f"<i>Error loading summary: {str(e)}</i>"
 
 def get_latest_rns():
-    """Checks the Kodal Minerals (KOD) page for the latest headline."""
+    """Checks Investegate for the latest KOD headline."""
     print("DEBUG: Checking Investegate for KOD news...")
     url = "https://www.investegate.co.uk/company/KOD"
     headers = {'User-Agent': 'Mozilla/5.0'}
@@ -76,10 +82,7 @@ def get_latest_rns():
         company = cols[2].text.strip()
         headline_tag = cols[3].find('a')
         headline_text = headline_tag.text.strip()
-        
-        # FIXED: Ensure the link is absolute
-        raw_href = headline_tag['href']
-        full_link = f"{raw_href}"
+        full_link = headline_tag['href']
         
         return {
             "id": full_link,
@@ -92,24 +95,18 @@ def get_latest_rns():
         return None
 
 def main():
-    if not TOKEN or not CHAT_ID:
-        print("ERROR: Missing Secrets!")
-        sys.exit(1)
-
     data = get_latest_rns()
     if not data:
         return
 
-    # Check local file to see if we've already sent this link
     last_id = ""
     if os.path.exists(ID_FILE):
         with open(ID_FILE, "r") as f:
             last_id = f.read().strip()
     
     if data["id"] != last_id:
-        print(f"DEBUG: NEW RNS! Sending messages...")
+        print(f"DEBUG: NEW RNS! Broadcasting to all chats...")
         
-        # MESSAGE 1: The Main Alert
         alert_msg = (
             f"🔔 <b>New RNS Alert</b>\n\n"
             f"<b>Company:</b> {data['company']}\n"
@@ -118,12 +115,10 @@ def main():
         )
         send_telegram(alert_msg)
 
-        # MESSAGE 2: The AI Summary
         summary_text = get_ai_summary(data["id"])
         summary_msg = f"🤖 <b>AI Summary:</b>\n\n{summary_text}"
         send_telegram(summary_msg)
         
-        # Save ID to stop duplicates
         with open(ID_FILE, "w") as f:
             f.write(data["id"])
     else:

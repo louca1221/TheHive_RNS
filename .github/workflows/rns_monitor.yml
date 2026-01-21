@@ -24,7 +24,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install requests beautifulsoup4
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
       - name: Run Scripts
         env:
@@ -34,6 +35,7 @@ jobs:
           KOD_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           KOD_CHAT_ID: ${{ secrets.CHAT_ID }}
           GH_PAT: ${{ secrets.GH_PAT }}
+          PYTHONUNBUFFERED: "1"  # This is the fix for invisible logs
         run: |
           python commands.py
           # This line is key: it re-pulls the file commands.py just changed
@@ -49,6 +51,7 @@ jobs:
           # Check if the file exists and has changes
           if [ -f last_rns_ids.txt ]; then
             git add last_rns_ids.txt
+            git add kod_last_rns_id.txt
             
             # Only commit if there are actual differences
             if ! git diff --cached --quiet; then

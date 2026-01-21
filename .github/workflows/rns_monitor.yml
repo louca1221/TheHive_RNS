@@ -1,7 +1,6 @@
 name: RNS Alert Bot
 
 on:
-  schedule:
   workflow_dispatch:
   repository_dispatch:
     types: [trigger-rns]

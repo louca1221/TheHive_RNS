@@ -31,6 +31,8 @@ jobs:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           COMMAND_CHAT_ID: ${{ secrets.COMMAND_CHAT_ID }}
           NOTIFICATION_CHAT_ID: ${{ secrets.NOTIFICATION_CHAT_ID }}
+          KOD_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          KOD_CHAT_ID: ${{ secrets.CHAT_ID }}
           GH_PAT: ${{ secrets.GH_PAT }}
         run: |
           python commands.py

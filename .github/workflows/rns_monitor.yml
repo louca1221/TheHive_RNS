@@ -41,28 +41,21 @@ jobs:
           # This line is key: it re-pulls the file commands.py just changed
           git pull 
           python bot.py
-          kod_RNS.py
+          python kod_RNS.py
 
       - name: Commit and push changes
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          # Check if the file exists and has changes
-          if [ -f last_rns_ids.txt ]; then
-            git add last_rns_ids.txt
-            git add kod_last_rns_id.txt
-            
-            # Only commit if there are actual differences
-            if ! git diff --cached --quiet; then
-              git commit -m "Update last seen RNS IDs [skip ci]"
-              
-              # Rebase ensures the bot's data is added to the latest version of main
-              git pull --rebase origin main
-              git push origin main
-            else
-              echo "No new RNS IDs to commit."
-            fi
+          # Add any files that might have been updated
+          [ -f last_rns_ids.txt ] && git add last_rns_ids.txt
+          [ -f kod_last_rns_id.txt ] && git add kod_last_rns_id.txt
+          
+          if ! git diff --cached --quiet; then
+            git commit -m "Update last seen RNS IDs [skip ci]"
+            git pull --rebase origin main
+            git push origin main
           else
-            echo "File last_rns_ids.txt does not exist yet."
+            echo "No changes to commit."
           fi

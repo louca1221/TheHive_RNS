@@ -37,6 +37,7 @@ jobs:
           # This line is key: it re-pulls the file commands.py just changed
           git pull 
           python bot.py
+          kod_RNS.py
 
       - name: Commit and push changes
         run: |

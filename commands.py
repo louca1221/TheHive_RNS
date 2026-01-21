@@ -1,7 +1,6 @@
 import requests
 import os
 import base64
-import re
 
 # --- CONFIGURATION ---
 TOKEN = os.getenv("TELEGRAM_TOKEN")
@@ -9,19 +8,20 @@ GITHUB_TOKEN = os.getenv("GH_PAT")
 REPO_NAME = "louca1221/TheHive_RNS"
 TICKER_FILE = "tickers.txt"
 
-# Pull secret and split by comma to handle multiple IDs (e.g. "123,456")
+# Pull secret and split by comma, cleaning up any accidental spaces
 AUTHORIZED_IDS = [id.strip() for id in os.getenv("COMMAND_CHAT_ID", "").split(",") if id.strip()]
 
-def send_telegram_msg(chat_id, text):
-    """Sends a message to a specific chat_id."""
+def broadcast_msg(text):
+    """Sends a message to EVERYONE in the AUTHORIZED_IDS list."""
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    params = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
-    try:
-        res = requests.post(url, params=params, timeout=10)
-        if res.status_code != 200:
-            print(f"Error sending to {chat_id}: {res.text}")
-    except Exception as e:
-        print(f"Connection error: {e}")
+    for chat_id in AUTHORIZED_IDS:
+        params = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
+        try:
+            res = requests.post(url, params=params, timeout=10)
+            if res.status_code != 200:
+                print(f"Error sending to {chat_id}: {res.text}")
+        except Exception as e:
+            print(f"Connection error for {chat_id}: {e}")
 
 def update_github_file(new_content_str, message):
     file_url = f"https://api.github.com/repos/{REPO_NAME}/contents/{TICKER_FILE}"
@@ -30,7 +30,7 @@ def update_github_file(new_content_str, message):
         "Accept": "application/vnd.github+json"
     }
     
-    # Get the current file to get the SHA
+    # Get the current file to get the SHA (required for GitHub API updates)
     res = requests.get(file_url, headers=headers)
     sha = res.json().get('sha') if res.status_code == 200 else None
 
@@ -59,12 +59,12 @@ def handle_commands():
             msg_data = update.get("message") or update.get("channel_post")
             if not msg_data: continue
             
-            # Identify who sent the message
+            # Security Check
             current_chat_id = str(msg_data.get("chat", {}).get("id"))
+            sender_name = msg_data.get("from", {}).get("first_name", "User")
             
-            # SECURITY CHECK: Is this sender in the AUTHORIZED_IDS list?
             if current_chat_id not in AUTHORIZED_IDS:
-                print(f"Unauthorized access attempt from: {current_chat_id}")
+                print(f"Ignored unauthorized ID: {current_chat_id}")
                 continue
 
             text = msg_data.get("text", "").strip()
@@ -84,27 +84,32 @@ def handle_commands():
                 
                 if added:
                     current_tickers.extend(added)
-                    status = update_github_file("\n".join(current_tickers), f"Add {added}")
+                    status = update_github_file("\n".join(current_tickers), f"Add {added} by {sender_name}")
                     if status in [200, 201]:
-                        send_telegram_msg(current_chat_id, f"✅ Added: <b>{', '.join(added)}</b>")
+                        broadcast_msg(f"✅ <b>{sender_name}</b> added: <b>{', '.join(added)}</b>")
                 else:
-                    send_telegram_msg(current_chat_id, "ℹ️ No new tickers added.")
+                    broadcast_msg(f"ℹ️ {sender_name} tried adding tickers already in list.")
 
             # Command: /REMOVE
             elif text.upper().startswith("/REMOVE "):
                 ticker = text[8:].strip().upper()
                 if ticker in current_tickers:
                     current_tickers.remove(ticker)
-                    update_github_file("\n".join(current_tickers), f"Remove {ticker}")
-                    send_telegram_msg(current_chat_id, f"✅ Removed: <b>{ticker}</b>")
+                    status = update_github_file("\n".join(current_tickers), f"Remove {ticker} by {sender_name}")
+                    if status in [200, 201]:
+                        broadcast_msg(f"✅ <b>{sender_name}</b> removed: <b>{ticker}</b>")
                 else:
-                    send_telegram_msg(current_chat_id, f"ℹ️ {ticker} not found.")
+                    broadcast_msg(f"ℹ️ {sender_name} tried removing <b>{ticker}</b> (not found).")
 
             # Command: /LIST
             elif text.upper() == "/LIST":
-                msg = "📋 <b>Watchlist:</b>\n" + "\n".join([f"• {t}" for t in sorted(current_tickers)])
-                send_telegram_msg(current_chat_id, msg)
+                if current_tickers:
+                    msg = f"📋 <b>Watchlist (Requested by {sender_name}):</b>\n\n" + "\n".join([f"• {t}" for t in sorted(current_tickers)])
+                else:
+                    msg = f"📋 Watchlist is empty (Requested by {sender_name})."
+                broadcast_msg(msg)
 
+        # Clear updates so they don't repeat next run
         if last_id > 0:
             requests.get(url, params={"offset": last_id + 1})
 

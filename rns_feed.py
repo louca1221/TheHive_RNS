@@ -6,8 +6,8 @@ import re
 from urllib.parse import urljoin
 
 # --- CONFIGURATION ---
-TOKEN = os.getenv("TELEGRAM_TOKEN")
-NOTIFICATION_CHAT_ID = os.getenv("NOTIFICATION_CHAT_ID")
+TOKEN = os.getenv("rnsfeedtoken")
+NOTIFICATION_CHAT_ID = os.getenv("rnsfeedchatid")
 FILE_NAME = "rnsfeedlastrns.txt"
 TICKER_FILE = "tickers.txt"
 

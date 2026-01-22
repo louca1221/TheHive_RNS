@@ -8,7 +8,7 @@ from urllib.parse import urljoin
 # --- CONFIGURATION ---
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 NOTIFICATION_CHAT_ID = os.getenv("NOTIFICATION_CHAT_ID")
-FILE_NAME = "last_rns_ids.txt"
+FILE_NAME = "rnsfeedlastrns.txt"
 TICKER_FILE = "tickers.txt"
 
 def load_tickers():
@@ -41,7 +41,7 @@ def check_rns():
 
     base_url = "https://www.investegate.co.uk"
     # Added perPage=300 to ensure we see the whole morning's news
-    today_url = urljoin(base_url, "/today-announcements/?perPage=300")
+    today_url = urljoin(base_url, "sector/basic-resources?perPage=300")
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
 
     if os.path.exists(FILE_NAME):

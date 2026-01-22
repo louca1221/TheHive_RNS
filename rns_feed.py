@@ -9,7 +9,7 @@ from urllib.parse import urljoin
 TOKEN = os.getenv("rnsfeedtoken")
 NOTIFICATION_CHAT_ID = os.getenv("rnsfeedchatid")
 FILE_NAME = "rnsfeedlastrns.txt"
-TICKER_FILE = "tickers.txt"
+TICKER_FILE = "rnsfeedtickers.txt"
 
 def load_tickers():
     if os.path.exists(TICKER_FILE):
@@ -19,11 +19,11 @@ def load_tickers():
     return []
 
 def send_telegram_msg(text):
-    if not NOTIFICATION_CHAT_ID:
-        print("Error: NOTIFICATION_CHAT_ID not set.")
+    if not rnsfeedchatid:
+        print("Error: rnsfeedchatid not set.")
         return
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    params = {"chat_id": NOTIFICATION_CHAT_ID, "text": text, "parse_mode": "HTML"}
+    params = {"chat_id": rnsfeedchatid, "text": text, "parse_mode": "HTML"}
     try:
         res = requests.post(url, params=params, timeout=10)
         if res.status_code != 200:
@@ -95,8 +95,8 @@ def check_rns():
                         send_telegram_msg(msg)
                         
                         with open(FILE_NAME, "a") as f:
-                            f.write(rns_id + "\n")
-                        last_seen.add(rns_id)
+                            f.write(rnsfeedlastrns + "\n")
+                        last_seen.add(rnsfeedlastrns)
                         news_found += 1
         
         print(f"Scan complete. Found {news_found} new items.")

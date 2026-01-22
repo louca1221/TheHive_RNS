@@ -42,7 +42,8 @@ jobs:
           git pull 
           python bot.py
           python kod_RNS.py
-
+          python Update rns_feed.py
+          
       - name: Commit and push changes
         run: |
           git config --global user.name "github-actions[bot]"

@@ -34,6 +34,8 @@ jobs:
           NOTIFICATION_CHAT_ID: ${{ secrets.NOTIFICATION_CHAT_ID }}
           KOD_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           KOD_CHAT_ID: ${{ secrets.CHAT_ID }}
+          KOD_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          KOD_CHAT_ID: ${{ secrets.CHAT_ID }}
           GH_PAT: ${{ secrets.GH_PAT }}
           PYTHONUNBUFFERED: "1"  # This is the fix for invisible logs
         run: |
@@ -42,7 +44,7 @@ jobs:
           git pull 
           python bot.py
           python kod_RNS.py
-          python Update rns_feed.py
+         
           
       - name: Commit and push changes
         run: |

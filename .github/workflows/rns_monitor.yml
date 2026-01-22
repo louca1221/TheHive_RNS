@@ -45,7 +45,6 @@ jobs:
           python bot.py
           python kod_RNS.py
          
-          
       - name: Commit and push changes
         run: |
           git config --global user.name "github-actions[bot]"

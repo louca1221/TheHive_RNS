@@ -32,8 +32,6 @@ jobs:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           COMMAND_CHAT_ID: ${{ secrets.COMMAND_CHAT_ID }}
           NOTIFICATION_CHAT_ID: ${{ secrets.NOTIFICATION_CHAT_ID }}
-          KOD_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          KOD_CHAT_ID: ${{ secrets.CHAT_ID }}
           GH_PAT: ${{ secrets.GH_PAT }}
           PYTHONUNBUFFERED: "1"  # This is the fix for invisible logs
         run: |
@@ -41,7 +39,6 @@ jobs:
           # This line is key: it re-pulls the file commands.py just changed
           git pull 
           python bot.py
-          python kod_RNS.py
          
       - name: Commit and push changes
         run: |

@@ -43,11 +43,15 @@ def check_rns():
     today_url = urljoin(base_url, "/today-announcements/?perPage=300")
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
 
+    # We use a set to keep track of hashes for quick lookup
+    last_seen_hashes = set()
     if os.path.exists(FILE_NAME):
         with open(FILE_NAME, "r") as f:
-            last_seen = set(f.read().splitlines())
-    else:
-        last_seen = set()
+            for line in f:
+                # Extracts just the hash part if the line contains extra info
+                parts = line.strip().split(" | ")
+                if parts:
+                    last_seen_hashes.add(parts[-1])
 
     try:
         response = requests.get(today_url, headers=headers, timeout=15)
@@ -62,7 +66,6 @@ def check_rns():
 
         for row in rows:
             cols = row.find_all('td')
-            # Investegate table structure: 0=Time, 2=Company/Ticker, 3=Announcement
             if len(cols) < 4:
                 continue
             
@@ -79,16 +82,14 @@ def check_rns():
                     title = link_tag.get_text().strip()
                     full_link = urljoin(base_url, link_tag['href'])
                     
-                    # UNIQUE HASH: Combines time, ticker, title, and URL
                     unique_string = f"{rns_time}_{ticker}_{title}_{full_link}"
                     rns_id = hashlib.md5(unique_string.encode()).hexdigest()
 
-                    if rns_id not in last_seen:
+                    if rns_id not in last_seen_hashes:
                         clean_company = company_raw.split('(')[0].replace('\n', ' ').strip()
                         clean_company = re.sub(' +', ' ', clean_company)
                         
-                        # Visible Console Output
-                        print(f"[{rns_time}] MATCH FOUND: {ticker} | Hash: {rns_id[:12]}")
+                        print(f"[{rns_time}] MATCH: {ticker} | Hash: {rns_id[:12]}")
                         
                         msg = (f"🕒 <b>{rns_time}</b>\n"
                                f"📰 <b>#{ticker} - {clean_company}</b>\n"
@@ -97,9 +98,13 @@ def check_rns():
                         
                         send_telegram_msg(msg)
                         
+                        # --- MODIFIED LOGGING ---
+                        # This saves a human-readable line to your text file
+                        log_entry = f"{rns_time} | {ticker} | {rns_id}"
                         with open(FILE_NAME, "a") as f:
-                            f.write(rns_id + "\n")
-                        last_seen.add(rns_id)
+                            f.write(log_entry + "\n")
+                        
+                        last_seen_hashes.add(rns_id)
                         news_found += 1
         
         print(f"Scan complete. Found {news_found} new items.")

@@ -1,3 +1,36 @@
+import requests
+from bs4 import BeautifulSoup
+import os
+import hashlib
+import re
+from urllib.parse import urljoin
+
+# --- CONFIGURATION ---
+TOKEN = os.getenv("TELEGRAM_TOKEN")
+NOTIFICATION_CHAT_ID = os.getenv("NOTIFICATION_CHAT_I")
+FILE_NAME = "last_rns_ids.txt"
+TICKER_FILE = "tickers.txt"
+
+def load_tickers():
+    if os.path.exists(TICKER_FILE):
+        with open(TICKER_FILE, "r") as f:
+            lines = f.read().splitlines()
+            return [line.strip().upper() for line in lines if line.strip()]
+    return []
+
+def send_telegram_msg(text):
+    if not NOTIFICATION_CHAT_ID:
+        print("Error: NOTIFICATION_CHAT_ID not set.")
+        return
+    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+    params = {"chat_id": NOTIFICATION_CHAT_ID, "text": text, "parse_mode": "HTML"}
+    try:
+        res = requests.post(url, params=params, timeout=10)
+        if res.status_code != 200:
+            print(f"Telegram API Error: {res.text}")
+    except Exception as e:
+        print(f"Telegram connection error: {e}")
+
 def check_rns():
     tickers = load_tickers()
     if not tickers:
@@ -29,7 +62,7 @@ def check_rns():
 
         for row in rows:
             cols = row.find_all('td')
-            # Investegate Table: 0:Time, 1:Type, 2:Company, 3:Description
+            # Investegate table structure: 0=Time, 2=Company/Ticker, 3=Announcement
             if len(cols) < 4:
                 continue
             
@@ -46,7 +79,7 @@ def check_rns():
                     title = link_tag.get_text().strip()
                     full_link = urljoin(base_url, link_tag['href'])
                     
-                    # NEW: Include Time in the hash for 100% uniqueness
+                    # UNIQUE HASH: Combines time, ticker, title, and URL
                     unique_string = f"{rns_time}_{ticker}_{title}_{full_link}"
                     rns_id = hashlib.md5(unique_string.encode()).hexdigest()
 
@@ -54,9 +87,9 @@ def check_rns():
                         clean_company = company_raw.split('(')[0].replace('\n', ' ').strip()
                         clean_company = re.sub(' +', ' ', clean_company)
                         
-                        # Visible output in your terminal logs
-                        print(f"[{rns_time}] Match: {ticker} | Hash: {rns_id[:10]}...")
-
+                        # Visible Console Output
+                        print(f"[{rns_time}] MATCH FOUND: {ticker} | Hash: {rns_id[:12]}")
+                        
                         msg = (f"🕒 <b>{rns_time}</b>\n"
                                f"📰 <b>#{ticker} - {clean_company}</b>\n"
                                f"{title}\n\n"
@@ -72,3 +105,6 @@ def check_rns():
         print(f"Scan complete. Found {news_found} new items.")
     except Exception as e:
         print(f"Scraper Error: {e}")
+
+if __name__ == "__main__":
+    check_rns()

@@ -81,7 +81,8 @@ def check_rns():
                     full_link = urljoin(base_url, link_tag['href'])
                     
                     # Create unique ID for this specific RNS
-                    rns_id = hashlib.md5(f"{ticker}{title}".encode()).hexdigest()
+                   unique_string = f"{ticker}{title}{full_link}"
+                   rns_id = hashlib.md5(unique_string.encode()).hexdigest()
 
                     if rns_id not in last_seen:
                         clean_company = company_raw.split('(')[0].replace('\n', ' ').strip()

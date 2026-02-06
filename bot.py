@@ -1,36 +1,3 @@
-import requests
-from bs4 import BeautifulSoup
-import os
-import hashlib
-import re
-from urllib.parse import urljoin
-
-# --- CONFIGURATION ---
-TOKEN = os.getenv("TELEGRAM_TOKEN")
-NOTIFICATION_CHAT_ID = os.getenv("NOTIFICATION_CHAT_I")
-FILE_NAME = "last_rns_ids.txt"
-TICKER_FILE = "tickers.txt"
-
-def load_tickers():
-    if os.path.exists(TICKER_FILE):
-        with open(TICKER_FILE, "r") as f:
-            lines = f.read().splitlines()
-            return [line.strip().upper() for line in lines if line.strip()]
-    return []
-
-def send_telegram_msg(text):
-    if not NOTIFICATION_CHAT_ID:
-        print("Error: NOTIFICATION_CHAT_ID not set.")
-        return
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    params = {"chat_id": NOTIFICATION_CHAT_ID, "text": text, "parse_mode": "HTML"}
-    try:
-        res = requests.post(url, params=params, timeout=10)
-        if res.status_code != 200:
-            print(f"Telegram API Error: {res.text}")
-    except Exception as e:
-        print(f"Telegram connection error: {e}")
-
 def check_rns():
     tickers = load_tickers()
     if not tickers:
@@ -40,7 +7,6 @@ def check_rns():
     print(f"Starting scan for tickers: {tickers}")
 
     base_url = "https://www.investegate.co.uk"
-    # Added perPage=300 to ensure we see the whole morning's news
     today_url = urljoin(base_url, "/today-announcements/?perPage=300")
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
 
@@ -63,15 +29,15 @@ def check_rns():
 
         for row in rows:
             cols = row.find_all('td')
+            # Investegate Table: 0:Time, 1:Type, 2:Company, 3:Description
             if len(cols) < 4:
                 continue
             
-            # Investegate Table: Col 2 is Company (Ticker), Col 3 is Announcement Title
+            rns_time = cols[0].get_text().strip()
             company_raw = cols[2].get_text().upper()
             announcement_cell = cols[3]
             
             for ticker in tickers:
-                # We search for the ticker inside parentheses, e.g., (VOD)
                 if re.search(rf'\({re.escape(ticker)}\)', company_raw):
                     link_tag = announcement_cell.find('a', href=True)
                     if not link_tag:
@@ -80,19 +46,22 @@ def check_rns():
                     title = link_tag.get_text().strip()
                     full_link = urljoin(base_url, link_tag['href'])
                     
-                    # Create unique ID for this specific RNS
-                    unique_string = f"{ticker}{title}{full_link}"
+                    # NEW: Include Time in the hash for 100% uniqueness
+                    unique_string = f"{rns_time}_{ticker}_{title}_{full_link}"
                     rns_id = hashlib.md5(unique_string.encode()).hexdigest()
 
                     if rns_id not in last_seen:
                         clean_company = company_raw.split('(')[0].replace('\n', ' ').strip()
                         clean_company = re.sub(' +', ' ', clean_company)
                         
-                        msg = (f"📰 <b>#{ticker} - {clean_company}</b>\n"
+                        # Visible output in your terminal logs
+                        print(f"[{rns_time}] Match: {ticker} | Hash: {rns_id[:10]}...")
+
+                        msg = (f"🕒 <b>{rns_time}</b>\n"
+                               f"📰 <b>#{ticker} - {clean_company}</b>\n"
                                f"{title}\n\n"
                                f"🔗 <a href='{full_link}'>Read Full Release</a>")
                         
-                        print(f"Match found! Sending alert for {ticker}")
                         send_telegram_msg(msg)
                         
                         with open(FILE_NAME, "a") as f:
@@ -103,6 +72,3 @@ def check_rns():
         print(f"Scan complete. Found {news_found} new items.")
     except Exception as e:
         print(f"Scraper Error: {e}")
-
-if __name__ == "__main__":
-    check_rns()

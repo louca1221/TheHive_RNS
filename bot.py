@@ -4,6 +4,7 @@ import os
 import hashlib
 import re
 from urllib.parse import urljoin
+import time
 
 # --- CONFIGURATION ---
 TOKEN = os.getenv("TELEGRAM_TOKEN")
@@ -43,14 +44,13 @@ def check_rns():
     today_url = urljoin(base_url, "/today-announcements/?perPage=300")
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
 
-    # We use a set to keep track of hashes for quick lookup
     last_seen_hashes = set()
     if os.path.exists(FILE_NAME):
         with open(FILE_NAME, "r") as f:
             for line in f:
-                # Extracts just the hash part if the line contains extra info
                 parts = line.strip().split(" | ")
                 if parts:
+                    # The hash is always the last item on the line
                     last_seen_hashes.add(parts[-1])
 
     try:
@@ -82,6 +82,7 @@ def check_rns():
                     title = link_tag.get_text().strip()
                     full_link = urljoin(base_url, link_tag['href'])
                     
+                    # Create unique ID for this specific RNS
                     unique_string = f"{rns_time}_{ticker}_{title}_{full_link}"
                     rns_id = hashlib.md5(unique_string.encode()).hexdigest()
 
@@ -98,14 +99,19 @@ def check_rns():
                         
                         send_telegram_msg(msg)
                         
-                        # --- MODIFIED LOGGING ---
-                        # This saves a human-readable line to your text file
+                        # Anti-Flood Delay
+                        time.sleep(1)
+                        
+                        # LOGGING TO FILE
                         log_entry = f"{rns_time} | {ticker} | {rns_id}"
                         with open(FILE_NAME, "a") as f:
                             f.write(log_entry + "\n")
                         
                         last_seen_hashes.add(rns_id)
                         news_found += 1
+                    
+                    # Found a ticker match for this row, skip to the next row
+                    break 
         
         print(f"Scan complete. Found {news_found} new items.")
     except Exception as e:

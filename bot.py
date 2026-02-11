@@ -27,26 +27,24 @@ def send_telegram_msg(text, rns_url=None):
     
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
 
-    # We build the preview options dynamically to force Telegram to preview the RNS link
+    # Define options as a dictionary
     preview_options = {
+        "url": rns_url,
         "is_disabled": False,
-        "prefer_large_media": True,
-        "show_above_text": False
+        "prefer_large_media": True
     }
-    
-    # If a specific URL is provided, we tell Telegram to use that for the preview
-    if rns_url:
-        preview_options["url"] = rns_url
 
-    params = {
-        "chat_id": NOTIFICATION_CHAT_ID, 
-        "text": text, 
+    # Send as JSON body instead of URL params
+    payload = {
+        "chat_id": NOTIFICATION_CHAT_ID,
+        "text": text,
         "parse_mode": "HTML",
-        "link_preview_options": json.dumps(preview_options)
+        "link_preview_options": preview_options
     }
     
     try:
-        res = requests.post(url, params=params, timeout=10)
+        # Changed from 'params=payload' to 'json=payload'
+        res = requests.post(url, json=payload, timeout=10)
         if res.status_code != 200:
             print(f"Telegram API Error: {res.text}")
     except Exception as e:

@@ -27,23 +27,20 @@ def send_telegram_msg(text, rns_url=None):
     
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
 
-    # Define options as a dictionary
-    preview_options = {
-        "url": rns_url,
-        "is_disabled": False,
-        "prefer_large_media": True
-    }
-
-    # Send as JSON body instead of URL params
+    # payload sent as JSON ensures nested link_preview_options are parsed correctly
     payload = {
         "chat_id": NOTIFICATION_CHAT_ID,
         "text": text,
         "parse_mode": "HTML",
-        "link_preview_options": preview_options
+        "link_preview_options": {
+            "url": rns_url,
+            "is_disabled": False,
+            "prefer_large_media": True,
+            "show_above_text": False
+        }
     }
     
     try:
-        # Changed from 'params=payload' to 'json=payload'
         res = requests.post(url, json=payload, timeout=10)
         if res.status_code != 200:
             print(f"Telegram API Error: {res.text}")
@@ -60,7 +57,9 @@ def check_rns():
 
     base_url = "https://www.investegate.co.uk"
     today_url = urljoin(base_url, "/today-announcements/?perPage=300")
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    }
 
     last_seen_hashes = set()
     if os.path.exists(FILE_NAME):
@@ -97,6 +96,7 @@ def check_rns():
                         continue
                         
                     title = link_tag.get_text().strip()
+                    # Clean the link of trailing question marks
                     full_link = urljoin(base_url, link_tag['href']).strip().rstrip('?')
                     
                     unique_string = f"{rns_time}_{ticker}_{title}_{full_link}"
@@ -113,13 +113,14 @@ def check_rns():
                                f"{title}\n\n"
                                f"🔗 <a href='{full_link}'>Read Full Release</a>")
                         
-                        # Pass the link to the sender function
-                        send_telegram_msg(msg, rns_url=full_link)
+                        # --- CACHE BUSTER ---
+                        # Append a timestamp to the URL to force Telegram to re-crawl the preview
+                        preview_url = f"{full_link}?t={int(time.time())}"
                         
-                        # Anti-Flood Delay
-                        time.sleep(1)
+                        send_telegram_msg(msg, rns_url=preview_url)
                         
-                        # LOGGING TO FILE
+                        time.sleep(1) # Anti-flood delay
+                        
                         log_entry = f"{rns_time} | {ticker} | {rns_id}"
                         with open(FILE_NAME, "a") as f:
                             f.write(log_entry + "\n")
@@ -127,7 +128,7 @@ def check_rns():
                         last_seen_hashes.add(rns_id)
                         news_found += 1
                     
-                    break 
+                    break # Move to next table row once match is found
         
         print(f"Scan complete. Found {news_found} new items.")
     except Exception as e:

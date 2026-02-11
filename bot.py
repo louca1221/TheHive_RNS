@@ -97,7 +97,7 @@ def check_rns():
                         continue
                         
                     title = link_tag.get_text().strip()
-                    full_link = urljoin(base_url, link_tag['href'])
+                    full_link = urljoin(base_url, link_tag['href']).strip().rstrip('?')
                     
                     unique_string = f"{rns_time}_{ticker}_{title}_{full_link}"
                     rns_id = hashlib.md5(unique_string.encode()).hexdigest()

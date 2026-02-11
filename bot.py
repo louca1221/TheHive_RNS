@@ -5,6 +5,7 @@ import hashlib
 import re
 from urllib.parse import urljoin
 import time
+import json
 
 # --- CONFIGURATION ---
 TOKEN = os.getenv("TELEGRAM_TOKEN")
@@ -19,18 +20,29 @@ def load_tickers():
             return [line.strip().upper() for line in lines if line.strip()]
     return []
 
-def send_telegram_msg(text):
+def send_telegram_msg(text, rns_url=None):
     if not NOTIFICATION_CHAT_ID:
         print("Error: NOTIFICATION_CHAT_ID not set.")
         return
+    
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+
+    # We build the preview options dynamically to force Telegram to preview the RNS link
+    preview_options = {
+        "is_disabled": False,
+        "prefer_large_media": True,
+        "show_above_text": False
+    }
+    
+    # If a specific URL is provided, we tell Telegram to use that for the preview
+    if rns_url:
+        preview_options["url"] = rns_url
 
     params = {
         "chat_id": NOTIFICATION_CHAT_ID, 
         "text": text, 
         "parse_mode": "HTML",
-        "disable_web_page_preview": False,
-        "link_preview_options": '{"is_disabled": false, "prefer_large_media": true}'
+        "link_preview_options": json.dumps(preview_options)
     }
     
     try:
@@ -58,7 +70,6 @@ def check_rns():
             for line in f:
                 parts = line.strip().split(" | ")
                 if parts:
-                    # The hash is always the last item on the line
                     last_seen_hashes.add(parts[-1])
 
     try:
@@ -90,7 +101,6 @@ def check_rns():
                     title = link_tag.get_text().strip()
                     full_link = urljoin(base_url, link_tag['href'])
                     
-                    # Create unique ID for this specific RNS
                     unique_string = f"{rns_time}_{ticker}_{title}_{full_link}"
                     rns_id = hashlib.md5(unique_string.encode()).hexdigest()
 
@@ -105,7 +115,8 @@ def check_rns():
                                f"{title}\n\n"
                                f"🔗 <a href='{full_link}'>Read Full Release</a>")
                         
-                        send_telegram_msg(msg)
+                        # Pass the link to the sender function
+                        send_telegram_msg(msg, rns_url=full_link)
                         
                         # Anti-Flood Delay
                         time.sleep(1)
@@ -118,7 +129,6 @@ def check_rns():
                         last_seen_hashes.add(rns_id)
                         news_found += 1
                     
-                    # Found a ticker match for this row, skip to the next row
                     break 
         
         print(f"Scan complete. Found {news_found} new items.")

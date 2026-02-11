@@ -24,7 +24,15 @@ def send_telegram_msg(text):
         print("Error: NOTIFICATION_CHAT_ID not set.")
         return
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    params = {"chat_id": NOTIFICATION_CHAT_ID, "text": text, "parse_mode": "HTML"}
+
+    params = {
+        "chat_id": NOTIFICATION_CHAT_ID, 
+        "text": text, 
+        "parse_mode": "HTML",
+        "disable_web_page_preview": False,
+        "link_preview_options": '{"is_disabled": false, "prefer_large_media": true}'
+    }
+    
     try:
         res = requests.post(url, params=params, timeout=10)
         if res.status_code != 200:

@@ -35,7 +35,7 @@ def send_telegram_msg(text, rns_url=None):
         "link_preview_options": {
             "url": rns_url,
             "is_disabled": False,
-            "prefer_large_media": True,
+            "prefer_large_media": False,
             "show_above_text": False
         }
     }

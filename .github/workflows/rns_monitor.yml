@@ -49,12 +49,14 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          # Pull latest changes again just in case another run finished while this one was processing
-          git pull --rebase origin main
-          
+          # 1. Stage the files first so git knows they are intended changes
           [ -f last_rns_ids.txt ] && git add last_rns_ids.txt
           [ -f kod_last_rns_id.txt ] && git add kod_last_rns_id.txt
           
+          # 2. Use autostash to move local changes out of the way during the rebase
+          git pull --rebase --autostash origin main
+          
+          # 3. Check if there is anything to commit after the pull
           if ! git diff --cached --quiet; then
             git commit -m "Update last seen RNS IDs [skip ci]"
             git push origin main

@@ -4,6 +4,10 @@ on:
   workflow_dispatch:
   repository_dispatch:
     types: [trigger-rns]
+
+concurrency:
+  group: rns-monitor
+  cancel-in-progress: false
     
 jobs:
   build:
@@ -15,7 +19,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Required for pulling/rebasing history
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v4

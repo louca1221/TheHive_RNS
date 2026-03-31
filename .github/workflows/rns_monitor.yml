@@ -36,12 +36,16 @@ jobs:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           COMMAND_CHAT_ID: ${{ secrets.COMMAND_CHAT_ID }}
           NOTIFICATION_CHAT_ID: ${{ secrets.NOTIFICATION_CHAT_ID }}
+          LOG_CHAT_ID: ${{ secrets.LOG_CHAT_ID }}
           GH_PAT: ${{ secrets.GH_PAT }}
           PYTHONUNBUFFERED: "1"  # This is the fix for invisible logs
         run: |
           python commands.py
-          # This line is key: it re-pulls the file commands.py just changed
-          git pull 
+          
+          # Fix for "unstaged changes" error
+          git add tickers.txt || true
+          git pull --rebase --autostash origin main
+          
           python bot.py
          
       - name: Commit and push changes
@@ -49,14 +53,12 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          # 1. Stage the files first so git knows they are intended changes
+          # Pull latest changes again just in case another run finished while this one was processing
+          git pull --rebase --autostash origin main
+          
           [ -f last_rns_ids.txt ] && git add last_rns_ids.txt
           [ -f kod_last_rns_id.txt ] && git add kod_last_rns_id.txt
           
-          # 2. Use autostash to move local changes out of the way during the rebase
-          git pull --rebase --autostash origin main
-          
-          # 3. Check if there is anything to commit after the pull
           if ! git diff --cached --quiet; then
             git commit -m "Update last seen RNS IDs [skip ci]"
             git push origin main

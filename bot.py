@@ -38,7 +38,8 @@ def load_tickers():
             return [line.strip().upper() for line in lines if line.strip()]
     return []
 
-def send_telegram_msg(text, rns_url=None):
+def send_telegram_msg(text, rns_url=None, max_retries=3):
+    """Sends a message to Telegram, with smart retry logic for 429 Rate Limits."""
     if not NOTIFICATION_CHAT_ID:
         print("Error: NOTIFICATION_CHAT_ID not set.")
         return
@@ -58,12 +59,30 @@ def send_telegram_msg(text, rns_url=None):
         }
     }
     
-    try:
-        res = requests.post(url, json=payload, timeout=10)
-        if res.status_code != 200:
-            print(f"Telegram API Error: {res.text}")
-    except Exception as e:
-        print(f"Telegram connection error: {e}")
+    for attempt in range(max_retries):
+        try:
+            res = requests.post(url, json=payload, timeout=10)
+            
+            if res.status_code == 200:
+                return  # Success! Exit the function.
+                
+            elif res.status_code == 429:
+                # Telegram is telling us to slow down (too many messages)
+                error_data = res.json()
+                retry_after = error_data.get("parameters", {}).get("retry_after", 30)
+                # Log this to your admin channel so you know it's happening
+                log_to_telegram(f"⚠️ Limit Hit! Pausing for {retry_after} seconds...")
+                time.sleep(retry_after) # Wait exactly as long as Telegram asked
+                
+            else:
+                print(f"Telegram API Error: {res.text}")
+                break # Don't retry on other types of errors (like bad formatting)
+                
+        except Exception as e:
+            print(f"Telegram connection error: {e}")
+            time.sleep(5) # Wait 5 seconds on general network errors before trying again
+            
+    print("Failed to send message after maximum retries.")
 
 def check_rns():
     tickers = load_tickers()
@@ -137,7 +156,7 @@ def check_rns():
                         
                         send_telegram_msg(msg, rns_url=preview_url)
                         
-                        time.sleep(1) # Anti-flood delay
+                        time.sleep(1) # Standard anti-flood delay (smart retry handles the big limits)
                         
                         log_entry = f"{rns_time} | {ticker} | {rns_id}"
                         with open(FILE_NAME, "a") as f:

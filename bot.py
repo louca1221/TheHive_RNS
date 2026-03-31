@@ -67,7 +67,7 @@ def send_telegram_msg(text, rns_url=None, max_retries=3):
                 return  # Success! Exit the function.
                 
             elif res.status_code == 429:
-                # Telegram is telling us to slow down (too many messages)
+                # Telegram is telling us to slow dwn (too many messages)
                 error_data = res.json()
                 retry_after = error_data.get("parameters", {}).get("retry_after", 30)
                 # Log this to your admin channel so you know it's happening
@@ -90,7 +90,7 @@ def check_rns():
         log_to_telegram("Watchlist is empty. No tickers to scan.")
         return
     
-    log_to_telegram(f"Starting scan for tickers: {tickers}")
+    log_to_telegram(f"Starting scan for {len(tickers)} tickers.")
 
     base_url = "https://www.investegate.co.uk"
     today_url = urljoin(base_url, "/today-announcements/?perPage=300")

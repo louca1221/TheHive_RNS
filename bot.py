@@ -10,8 +10,26 @@ import json
 # --- CONFIGURATION ---
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 NOTIFICATION_CHAT_ID = os.getenv("NOTIFICATION_CHAT_ID")
+LOG_CHAT_ID = os.getenv("LOG_CHAT_ID")
 FILE_NAME = "last_rns_ids.txt"
 TICKER_FILE = "tickers.txt"
+
+def log_to_telegram(message):
+    """Prints to console and sends a log to the dedicated Telegram channel."""
+    print(message) # Still print to GitHub logs
+    if not LOG_CHAT_ID:
+        return
+    
+    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+    payload = {
+        "chat_id": LOG_CHAT_ID,
+        "text": f"🤖 <b>Bot Log:</b>\n{message}",
+        "parse_mode": "HTML"
+    }
+    try:
+        requests.post(url, json=payload, timeout=10)
+    except Exception as e:
+        print(f"Failed to send log to Telegram: {e}")
 
 def load_tickers():
     if os.path.exists(TICKER_FILE):
@@ -50,10 +68,10 @@ def send_telegram_msg(text, rns_url=None):
 def check_rns():
     tickers = load_tickers()
     if not tickers:
-        print("Watchlist is empty. No tickers to scan.")
+        log_to_telegram("Watchlist is empty. No tickers to scan.")
         return
     
-    print(f"Starting scan for tickers: {tickers}")
+    log_to_telegram(f"Starting scan for tickers: {tickers}")
 
     base_url = "https://www.investegate.co.uk"
     today_url = urljoin(base_url, "/today-announcements/?perPage=300")
@@ -74,7 +92,7 @@ def check_rns():
         soup = BeautifulSoup(response.text, 'html.parser')
         table = soup.find('table')
         if not table:
-            print("Could not find the announcements table on Investegate.")
+            log_to_telegram("Could not find the announcements table on Investegate.")
             return
         
         rows = table.find_all('tr')
@@ -106,7 +124,7 @@ def check_rns():
                         clean_company = company_raw.split('(')[0].replace('\n', ' ').strip()
                         clean_company = re.sub(' +', ' ', clean_company)
                         
-                        print(f"[{rns_time}] MATCH: {ticker} | Hash: {rns_id[:12]}")
+                        log_to_telegram(f"[{rns_time}] MATCH: {ticker} | Hash: {rns_id[:12]}")
                         
                         msg = (f"🕒 <b>{rns_time}</b>\n"
                                f"📰 <b>#{ticker} - {clean_company}</b>\n"
@@ -130,9 +148,12 @@ def check_rns():
                     
                     break # Move to next table row once match is found
         
-        print(f"Scan complete. Found {news_found} new items.")
+        if news_found > 0:
+            log_to_telegram(f"Scan complete. Found {news_found} new items.")
+        else:
+            print("Scan complete. No new items.")
     except Exception as e:
-        print(f"Scraper Error: {e}")
+        log_to_telegram(f"Scraper Error: {e}")
 
 if __name__ == "__main__":
     check_rns()

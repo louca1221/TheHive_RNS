@@ -89,9 +89,7 @@ def check_rns():
     if not tickers:
         log_to_telegram("Watchlist is empty. No tickers to scan.")
         return
-    
-    # Updated to show count instead of full list
-    log_to_telegram(f"Starting scan for {len(tickers)} tickers.")
+    print(f"Starting scan for {len(tickers)} tickers.")
 
     base_url = "https://www.investegate.co.uk"
     today_url = urljoin(base_url, "/today-announcements/?perPage=300")

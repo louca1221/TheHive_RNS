@@ -67,11 +67,11 @@ def send_telegram_msg(text, rns_url=None, max_retries=3):
                 return  # Success! Exit the function.
                 
             elif res.status_code == 429:
-                # Telegram is telling us to slow dwn (too many messages)
+                # Telegram is telling us to slow down (too many messages)
                 error_data = res.json()
                 retry_after = error_data.get("parameters", {}).get("retry_after", 30)
                 # Log this to your admin channel so you know it's happening
-                log_to_telegram(f"⚠️ Limit Hit! Pausing for {retry_after} seconds...")
+                log_to_telegram(f"⚠️ Rate limited by Telegram! Pausing for {retry_after} seconds...")
                 time.sleep(retry_after) # Wait exactly as long as Telegram asked
                 
             else:
@@ -90,6 +90,7 @@ def check_rns():
         log_to_telegram("Watchlist is empty. No tickers to scan.")
         return
     
+    # Updated to show count instead of full list
     log_to_telegram(f"Starting scan for {len(tickers)} tickers.")
 
     base_url = "https://www.investegate.co.uk"
@@ -116,6 +117,9 @@ def check_rns():
         
         rows = table.find_all('tr')
         news_found = 0
+        
+        # --- NEW: List to hold batched log updates ---
+        batched_log_entries = []
 
         for row in rows:
             cols = row.find_all('td')
@@ -143,15 +147,19 @@ def check_rns():
                         clean_company = company_raw.split('(')[0].replace('\n', ' ').strip()
                         clean_company = re.sub(' +', ' ', clean_company)
                         
-                        log_to_telegram(f"[{rns_time}] MATCH: {ticker} | Hash: {rns_id[:12]}")
+                        # Print to GitHub Actions console for debugging
+                        print(f"[{rns_time}] MATCH: {ticker} | Hash: {rns_id[:12]}")
                         
+                        # --- NEW: Append to our batched log list instead of sending immediately ---
+                        batched_log_entries.append(f"• [{rns_time}] <b>{ticker}</b> - {clean_company}")
+                        
+                        # --- This still sends the full alert to your main notification channel immediately ---
                         msg = (f"🕒 <b>{rns_time}</b>\n"
                                f"📰 <b>#{ticker} - {clean_company}</b>\n"
                                f"{title}\n\n"
                                f"🔗 <a href='{full_link}'>Read Full Release</a>")
                         
                         # --- CACHE BUSTER ---
-                        # Append a timestamp to the URL to force Telegram to re-crawl the preview
                         preview_url = f"{full_link}?t={int(time.time())}"
                         
                         send_telegram_msg(msg, rns_url=preview_url)
@@ -167,10 +175,18 @@ def check_rns():
                     
                     break # Move to next table row once match is found
         
+        # --- NEW: Send the batched log summary ---
         if news_found > 0:
-            log_to_telegram(f"Scan complete. Found {news_found} new items.")
+            summary_msg = f"Scan complete. Found {news_found} new items:\n\n" + "\n".join(batched_log_entries)
+            
+            # Safeguard against Telegram's 4096 character limit per message
+            if len(summary_msg) > 4000:
+                summary_msg = summary_msg[:4000] + "\n\n<i>... [Log truncated due to length]</i>"
+                
+            log_to_telegram(summary_msg)
         else:
             print("Scan complete. No new items.")
+            
     except Exception as e:
         log_to_telegram(f"Scraper Error: {e}")
 

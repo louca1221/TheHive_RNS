@@ -5,11 +5,22 @@ import base64
 # --- CONFIGURATION ---
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 GITHUB_TOKEN = os.getenv("GH_PAT")
+LOG_CHAT_ID = os.getenv("LOG_CHAT_ID")
 REPO_NAME = "louca1221/TheHive_RNS"
 TICKER_FILE = "tickers.txt"
 
 # Pull secret and split by comma, cleaning up any accidental spaces
 AUTHORIZED_IDS = [id.strip() for id in os.getenv("COMMAND_CHAT_ID", "").split(",") if id.strip()]
+
+def log_command(user, action, details):
+    """Sends a log message to the dedicated Telegram channel."""
+    if not LOG_CHAT_ID: return
+    msg = f"🛠 <b>Command Log:</b>\nUser: {user}\nAction: {action}\nDetails: {details}"
+    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+    try:
+        requests.post(url, json={"chat_id": LOG_CHAT_ID, "text": msg, "parse_mode": "HTML"}, timeout=10)
+    except Exception as e:
+        print(f"Failed to log command: {e}")
 
 def broadcast_msg(text):
     """Sends a message to EVERYONE in the AUTHORIZED_IDS list."""
@@ -87,8 +98,10 @@ def handle_commands():
                     status = update_github_file("\n".join(current_tickers), f"Add {added} by {sender_name}")
                     if status in [200, 201]:
                         broadcast_msg(f"✅ <b>{sender_name}</b> added: <b>{', '.join(added)}</b>")
+                        log_command(sender_name, "ADD TICKER", f"{', '.join(added)}")
                 else:
                     broadcast_msg(f"ℹ️ {sender_name} tried adding tickers already in list.")
+                    log_command(sender_name, "ADD TICKER FAILED", f"Tickers already in list: {raw_input}")
 
             # Command: /REMOVE
             elif text.upper().startswith("/REMOVE "):
@@ -98,8 +111,10 @@ def handle_commands():
                     status = update_github_file("\n".join(current_tickers), f"Remove {ticker} by {sender_name}")
                     if status in [200, 201]:
                         broadcast_msg(f"✅ <b>{sender_name}</b> removed: <b>{ticker}</b>")
+                        log_command(sender_name, "REMOVE TICKER", ticker)
                 else:
                     broadcast_msg(f"ℹ️ {sender_name} tried removing <b>{ticker}</b> (not found).")
+                    log_command(sender_name, "REMOVE TICKER FAILED", f"Ticker not found: {ticker}")
 
             # Command: /LIST
             elif text.upper() == "/LIST":
@@ -108,6 +123,7 @@ def handle_commands():
                 else:
                     msg = f"📋 Watchlist is empty (Requested by {sender_name})."
                 broadcast_msg(msg)
+                log_command(sender_name, "LIST TICKERS", "Successfully requested list.")
 
         # Clear updates so they don't repeat next run
         if last_id > 0:
@@ -115,6 +131,7 @@ def handle_commands():
 
     except Exception as e:
         print(f"Command Error: {e}")
+        log_command("System", "ERROR", str(e))
 
 if __name__ == "__main__":
     handle_commands()

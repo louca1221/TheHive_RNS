@@ -175,7 +175,7 @@ def check_rns():
         
         # --- NEW: Send the batched log summary ---
         if news_found > 0:
-            summary_msg = f"Scan complete. Found {news_found} new items:\n\n" + "\n".join(batched_log_entries)
+            summary_msg = f"Found {news_found} new items:\n\n" + "\n".join(batched_log_entries)
             
             # Safeguard against Telegram's 4096 character limit per message
             if len(summary_msg) > 4000:

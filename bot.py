@@ -134,8 +134,6 @@ def check_rns():
         # After 3 tries, if we still don't have a table, we have to give up for this run
         if not table:
             print(f"❌ Could not find the announcements table after {max_scrape_retries} attempts. Last HTTP Status: {response_status}")
-            # Only alert Telegram if it completely fails after all retries
-            log_to_telegram(f"Scraper Error: Could not load Investegate table after {max_scrape_retries} attempts. (Status: {response_status})")
             return
         # -------------------------------
         

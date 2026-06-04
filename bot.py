@@ -106,20 +106,37 @@ def check_rns():
                     last_seen_hashes.add(parts[-1])
 
     try:
-        response = requests.get(today_url, headers=headers, timeout=15)
+        # --- NEW: Scraper Retry Loop ---
+        max_scrape_retries = 3
+        table = None
+        response_status = None
         
-        # --- DIAGNOSTIC LOGGING ---
-        if response.status_code != 200:
-            print(f"⚠️ Warning: Investegate returned HTTP Status {response.status_code}")
-            
-        soup = BeautifulSoup(response.text, 'html.parser')
-        table = soup.find('table')
+        for attempt in range(max_scrape_retries):
+            try:
+                response = requests.get(today_url, headers=headers, timeout=15)
+                response_status = response.status_code
+                
+                if response_status == 200:
+                    soup = BeautifulSoup(response.text, 'html.parser')
+                    table = soup.find('table')
+                    if table:
+                        break # Success! We found the table, exit the retry loop
+                
+                # If we get here, it means we either didn't get a 200 OK, or we didn't find the table
+                print(f"⚠️ Scrape attempt {attempt + 1} failed (Status: {response_status}). Retrying in 5 seconds...")
+                time.sleep(5)
+                
+            except Exception as e:
+                print(f"⚠️ Network error on attempt {attempt + 1}: {e}. Retrying in 5 seconds...")
+                time.sleep(5)
+
+        # After 3 tries, if we still don't have a table, we have to give up for this run
         if not table:
-            # Print the first 1000 characters of the page to the GitHub Actions log
-            print(f"DEBUG - WHAT INVESTEGATE RETURNED:\n{response.text[:1000]}")
-            
-            log_to_telegram(f"Could not find the announcements table. HTTP Status: {response.status_code}")
+            print(f"❌ Could not find the announcements table after {max_scrape_retries} attempts. Last HTTP Status: {response_status}")
+            # Only alert Telegram if it completely fails after all retries
+            log_to_telegram(f"Scraper Error: Could not load Investegate table after {max_scrape_retries} attempts. (Status: {response_status})")
             return
+        # -------------------------------
         
         rows = table.find_all('tr')
         news_found = 0

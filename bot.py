@@ -1,4 +1,5 @@
 import requests
+from curl_cffi import requests as c_requests # NEW: The stealth scraper
 from bs4 import BeautifulSoup
 import os
 import hashlib
@@ -113,7 +114,7 @@ def check_rns():
         
         for attempt in range(max_scrape_retries):
             try:
-                response = requests.get(today_url, headers=headers, timeout=15)
+                response = c_requests.get(today_url, impersonate="chrome", timeout=15)
                 response_status = response.status_code
                 
                 if response_status == 200:

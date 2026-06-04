@@ -107,10 +107,18 @@ def check_rns():
 
     try:
         response = requests.get(today_url, headers=headers, timeout=15)
+        
+        # --- DIAGNOSTIC LOGGING ---
+        if response.status_code != 200:
+            print(f"⚠️ Warning: Investegate returned HTTP Status {response.status_code}")
+            
         soup = BeautifulSoup(response.text, 'html.parser')
         table = soup.find('table')
         if not table:
-            log_to_telegram("Could not find the announcements table on Investegate.")
+            # Print the first 1000 characters of the page to the GitHub Actions log
+            print(f"DEBUG - WHAT INVESTEGATE RETURNED:\n{response.text[:1000]}")
+            
+            log_to_telegram(f"Could not find the announcements table. HTTP Status: {response.status_code}")
             return
         
         rows = table.find_all('tr')

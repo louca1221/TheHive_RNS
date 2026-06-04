@@ -114,7 +114,7 @@ def check_rns():
         
         for attempt in range(max_scrape_retries):
             try:
-                response = c_requests.get(today_url, impersonate="chrome", timeout=15)
+                response = c_requests.get(today_url, impersonate="safari15_5", timeout=15)
                 response_status = response.status_code
                 
                 if response_status == 200:
